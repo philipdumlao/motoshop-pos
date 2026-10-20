@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Motoshop POS</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<link rel="stylesheet" href="style.css"></head><body>
+<header><h1>MOTOSHOP POS</h1>
+<button class="g" id="lout" style="color:inherit;border-color:#888">Sign out</button><nav><button data-t="pos" class="on">Sell</button><button data-t="inv">Inventory</button><button data-t="rep">Reports</button></nav></header>
+<main>
+<section id="pos"><div class="grid">
+<div><div class="card"><h2>Add parts</h2>
+<div class="row"><div><label>Scan, type barcode, or search name</label><input id="q" placeholder="Barcode or part name" autocomplete="off"></div>
+<button class="b fit" id="posScan">Scan camera</button></div>
+<div class="list" id="res" style="margin-top:8px"></div></div>
+<div class="card"><h2>Add mechanic labor</h2>
+<div class="row"><div style="flex:2"><label>Job</label><input id="ld" placeholder="e.g. Change oil, tune-up"></div>
+<div><label>Labor (₱)</label><input id="la" type="number" min="0" step="any"></div></div>
+<div class="row" style="margin-top:8px"><div><label>Mechanic</label><input id="lm" placeholder="Name"></div>
+<div><label>Shop cut %</label><input id="lp" type="number" min="0" max="100" step="any"></div>
+<button class="b fit" id="addL">Add labor</button></div>
+<p class="mu" style="margin:8px 0 0">The shop cut is the owner’s share of the labor. It is added to the profit.</p></div></div>
+<div><div class="card"><h2>Current sale</h2><div id="cart"></div>
+<div id="tots" style="margin-top:10px"></div>
+<div class="row" style="margin-top:10px"><div><label>Cash received (₱)</label><input id="cash" type="number" min="0" step="any"></div>
+<button class="b fit" id="pay">Complete sale</button><button class="g fit" id="clr">Clear</button></div></div></div>
+</div></section>
+
+<section id="inv" hidden><div class="grid">
+<div class="card"><h2 id="fh">Add item</h2><input type="hidden" id="fid">
+<label>Barcode</label>
+<div class="row"><input id="fc" placeholder="Scan, type, or generate"><button class="g fit" id="fscan">Scan camera</button><button class="g fit" id="fgen">Generate</button></div>
+<div id="fprev" style="margin:8px 0"></div>
+<label>Item name</label><input id="fn" placeholder="e.g. Brake pad, Mags 17">
+<div class="row" style="margin-top:8px"><div><label>Cost (₱)</label><input id="fcost" type="number" min="0" step="any"></div><div><label>Selling price (₱)</label><input id="fprice" type="number" min="0" step="any"></div></div>
+<div class="row" style="margin-top:8px"><div><label>Stock</label><input id="fs" type="number" min="0"></div><div><label>Low-stock alert at</label><input id="fl" type="number" min="0" value="3"></div></div>
+<div class="row" style="margin-top:12px"><button class="b" id="fsave">Save item</button><button class="g" id="fnew">New</button></div></div>
+<div class="card"><h2>Items</h2><input id="iq" placeholder="Search items" style="margin-bottom:8px"><div class="sc" id="itbl"></div></div>
+</div></section>
+
+<section id="rep" hidden>
+<div class="row" style="margin-bottom:12px;max-width:520px"><div><label>Period</label><select id="per"><option value="d">Today</option><option value="w">Last 7 days</option><option value="m">This month</option><option value="a">All time</option></select></div>
+<div><label>Default shop cut % on labor</label><input id="dcut" type="number" min="0" max="100" step="any"></div></div>
+<div class="stats" id="stats"></div>
+<div class="card"><h2>Sales</h2><div class="sc" id="stbl"></div></div></section>
+</main>
+
+<div id="scm" hidden><div class="box"><div class="row" style="margin-bottom:8px"><div><label>Camera (built-in or external)</label><select id="camsel"></select></div><button class="g fit" id="scx">Close</button></div>
+<video id="vid" playsinline muted></video><p class="mu" id="scmsg" style="margin:8px 0 0">Point the camera at a barcode.</p></div></div>
+<div id="login" hidden style="position:fixed;inset:0;background:var(--bg);z-index:70;display:flex;align-items:center;justify-content:center;padding:14px"><div class="card" style="width:min(360px,100%)"><h2>Sign in to Motoshop POS</h2><label>Email</label><input id="le" type="email" autocomplete="username"><label style="margin-top:8px">Password</label><input id="lpw" type="password" autocomplete="current-password"><p class="bad" id="lerr"></p><button class="b" id="lgo">Sign in</button></div></div>
+<div id="toast" hidden></div><div id="lbl"></div>
+
+<script src="app.js"></script></body></html>
