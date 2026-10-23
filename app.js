@@ -25,20 +25,44 @@ async function load(uid){
 // staff see only the Sell tab (the database enforces this too)
 function applyRole(){document.querySelectorAll('nav button').forEach(b=>b.hidden=b.dataset.t!=='pos'&&role!=='admin')}
 function showTab(t){document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));['pos','inv','rep','usr'].forEach(i=>$(i).hidden=i!==t);render()}
-function resetUI(){db.items=[];db.sales=[];role=null;cart={parts:[],labor:[]};['le','lpw','q','ld','la','lm','lp','cash','ue','up','fc','fn','fcost','fprice','fs','iq'].forEach(i=>$(i).value='');$('fprev').innerHTML=''}
-function showLogin(msg){stopIdle();resetUI();$('lerr').textContent=msg||'';$('login').hidden=false;$('lout').hidden=true;applyRole();showTab('pos')}
+function resetUI(){db.items=[];db.sales=[];role=null;cart={parts:[],labor:[]};['le','lpw','q','ld','la','lm','lp','cash','ue','up','fc','fn','fcost','fprice','fs','iq','pwc','pwn','pwn2'].forEach(i=>$(i).value='');$('fprev').innerHTML='';try{sessionStorage.removeItem('moto-cache')}catch(e){}}
+function showLogin(msg){stopIdle();closePw();resetUI();$('lload').hidden=true;$('pwb').hidden=true;$('lerr').textContent=msg||'';$('login').hidden=false;$('lout').hidden=true;applyRole();showTab('pos')}
+let curUid;
+function enter(){$('login').hidden=true;$('lout').hidden=false;$('pwb').hidden=false;applyRole();startIdle();showTab('pos')}
 async function boot(){
- if(SUPABASE_URL.startsWith('YOUR')){$('lerr').textContent='Add your Supabase URL and anon key at the top of app.js.';return}
+ if(SUPABASE_URL.startsWith('YOUR')){$('lload').hidden=true;$('lerr').textContent='Add your Supabase URL and anon key at the top of app.js.';return}
  const{data:{session}}=await sb.auth.getSession();
  if(!session){showLogin();return}
- if(!await load(session.user.id)){showLogin('Could not load data. Please sign in again.');return}
- $('login').hidden=true;$('lout').hidden=false;applyRole();startIdle();showTab('pos')}
-$('lgo').onclick=async()=>{$('lgo').disabled=true;const{error}=await sb.auth.signInWithPassword({email:$('le').value.trim(),password:$('lpw').value});$('lgo').disabled=false;
- if(error)$('lerr').textContent=error.message;else{$('lpw').value='';boot()}};
+ curUid=session.user.id;
+ // show the last known data at once, then refresh it in the background
+ let c=null;try{c=JSON.parse(sessionStorage.getItem('moto-cache'))}catch(e){}
+ if(c&&c.uid===curUid){role=c.role;db.items=c.items;db.cut=c.cut;db.seq=c.seq;enter()}else c=null;
+ if(!await load(curUid)){if(!c)showLogin('Could not load data. Please sign in again.');return}
+ if(c){applyRole();role==='admin'?render():showTab('pos')}else enter()}
+addEventListener('pagehide',()=>{if(role)try{sessionStorage.setItem('moto-cache',JSON.stringify({uid:curUid,role,items:db.items,cut:db.cut,seq:db.seq}))}catch(e){}});
+$('lgo').onclick=async()=>{$('lgo').disabled=true;$('lerr').textContent='';$('lload').hidden=false;$('lload').textContent='Signing in…';
+ const{error}=await sb.auth.signInWithPassword({email:$('le').value.trim(),password:$('lpw').value});$('lgo').disabled=false;
+ if(error){$('lload').hidden=true;$('lerr').textContent=error.message}else{$('lpw').value='';$('lload').textContent='Loading shop data…';boot()}};
 $('lpw').onkeydown=e=>{if(e.key==='Enter')$('lgo').click()};
 async function signOut(msg){await sb.auth.signOut({scope:'local'});showLogin(msg)}
 $('lout').onclick=()=>signOut();
-const idleEv=['click','keydown','touchstart','pointermove'];
+/* ---------- change own password ---------- */
+function closePw(){$('pwm').hidden=true;$('pwe').textContent='';['pwc','pwn','pwn2'].forEach(i=>$(i).value='')}
+$('pwb').onclick=()=>{$('pwm').hidden=false;$('pwc').focus()};
+$('pwx').onclick=closePw;
+$('pws').onclick=async()=>{const c=$('pwc').value,n=$('pwn').value,e=$('pwe');
+ if(!c){e.textContent='Enter your current password.';return}
+ if(n.length<8){e.textContent='The new password must be at least 8 characters.';return}
+ if(n!==$('pwn2').value){e.textContent='The new passwords do not match.';return}
+ if(n===c){e.textContent='Choose a password different from the current one.';return}
+ $('pws').disabled=true;e.textContent='';
+ const email=(await sb.auth.getSession()).data.session?.user.email;
+ const v=await sb.auth.signInWithPassword({email,password:c}); // confirms the current password
+ if(v.error){e.textContent='Current password is incorrect.';$('pws').disabled=false;return}
+ const u=await sb.auth.updateUser({password:n});$('pws').disabled=false;
+ if(u.error){e.textContent=u.error.message;return}
+ closePw();toast('Password changed')};
+const idleEv=['click','keydown','touchstart'];
 function idleReset(){clearTimeout(idleT);idleT=setTimeout(()=>signOut('Signed out after '+IDLE_MIN+' minutes of inactivity.'),IDLE_MIN*60000)}
 function startIdle(){stopIdle();idleEv.forEach(e=>addEventListener(e,idleReset,{passive:true}));idleReset()}
 function stopIdle(){clearTimeout(idleT);idleEv.forEach(e=>removeEventListener(e,idleReset))}
@@ -136,19 +160,21 @@ function renderInv(){if($('inv').hidden)return;const v=$('iq').value.trim().toLo
  q('d',id=>{if(confirm('Delete this item?')){db.items=db.items.filter(i=>i.id!==id);dbDel(id);render()}})}
 
 /* ---------- reports ---------- */
-$('per').onchange=renderRep;
+$('per').onchange=renderRep;$('cf').onchange=renderRep;
 $('dcut').onchange=()=>{const p=parseFloat($('dcut').value);if(p>=0&&p<=100){db.cut=p;dbSet();$('lp').placeholder=p}};
 let repSeq=0;
 async function renderRep(){if($('rep').hidden)return;
  const n=new Date(),d0=new Date(n.getFullYear(),n.getMonth(),n.getDate()).getTime(),p=$('per').value;
  const from=p==='d'?d0:p==='w'?d0-6*864e5:p==='m'?new Date(n.getFullYear(),n.getMonth(),1).getTime():0;
  $('dcut').value=db.cut;const q=++repSeq;
- const r=await sb.from('sales').select('id,ts,parts,labor,total,pp,lab,cut,mech,profit').gte('ts',from).order('ts',{ascending:false}).limit(2000);
+ const r=await sb.from('sales').select('id,ts,cashier,parts,labor,total,pp,lab,cut,mech,profit').gte('ts',from).order('ts',{ascending:false}).limit(2000);
  if(q!==repSeq)return;if(r.error){toast('Load failed: '+r.error.message);return}
- const s=r.data,sum=k=>s.reduce((a,x)=>a+Number(x[k]),0);
+ const all=r.data,cf=$('cf'),cur=cf.value,names=[...new Set(all.map(x=>x.cashier).filter(Boolean))].sort();
+ cf.innerHTML='<option value="">Everyone</option>'+names.map(n=>`<option>${esc(n)}</option>`).join('');cf.value=names.includes(cur)?cur:'';
+ const s=cf.value?all.filter(x=>x.cashier===cf.value):all,sum=k=>s.reduce((a,x)=>a+Number(x[k]),0);
  const st=[['Sales',s.length],['Revenue',peso(sum('total'))],['Parts profit',peso(sum('pp'))],['Labor collected',peso(sum('lab'))],['Shop cut of labor',peso(sum('cut'))],['Paid to mechanics',peso(sum('mech'))]];
  $('stats').innerHTML=st.map(([a,b])=>`<div class="stat"><span class="mu">${a}</span><b>${b}</b></div>`).join('')+`<div class="stat hi"><span class="mu">Total profit (parts + shop cut)</span><b>${peso(sum('profit'))}</b></div>`;
- $('stbl').innerHTML=s.length?`<table><tr><th>Date</th><th>Details</th><th>Total</th><th>Profit</th></tr>${s.slice(0,100).map(x=>`<tr><td>${new Date(x.ts).toLocaleString('en-PH',{dateStyle:'short',timeStyle:'short'})}</td><td class="mu">${x.parts.map(p=>esc(p.name)+' ×'+p.qty).concat(x.labor.map(l=>esc(l.desc)+' ('+esc(l.mech)+')')).join(', ')}</td><td>${peso(x.total)}</td><td class="ok">${peso(x.profit)}</td></tr>`).join('')}</table>`:'<p class="mu">No sales in this period.</p>'}
+ $('stbl').innerHTML=s.length?`<table><tr><th>Date</th><th>Sold by</th><th>Details</th><th>Total</th><th>Profit</th></tr>${s.slice(0,100).map(x=>`<tr><td>${new Date(x.ts).toLocaleString('en-PH',{dateStyle:'short',timeStyle:'short'})}</td><td>${esc(x.cashier||'—')}</td><td class="mu">${x.parts.map(p=>esc(p.name)+' ×'+p.qty).concat(x.labor.map(l=>esc(l.desc)+' ('+esc(l.mech)+')')).join(', ')}</td><td>${peso(x.total)}</td><td class="ok">${peso(x.profit)}</td></tr>`).join('')}</table>`:'<p class="mu">No sales in this period.</p>'}
 
 /* ---------- users (admin only) ---------- */
 async function adminCall(body){const{data,error}=await sb.functions.invoke('manage-users',{body});
