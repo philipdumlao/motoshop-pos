@@ -2,28 +2,54 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const peso=n=>'₱'+Number(n||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2});
 const SUPABASE_URL='https://rfterllaaarworlwlyfu.supabase.co',SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJmdGVybGxhYWFyd29ybHdseWZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0NDUzNjEsImV4cCI6MjEwODAyMTM2MX0.9iuzkjLHdByw128ccDzCRfS4PC7quBHyZmGbdCgKgp4';
-const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
-let db={items:[],sales:[],cut:20,seq:0};
+/* ---------- Supabase connection ---------- */
+const IDLE_MIN=15; // sign out automatically after this many idle minutes
+// sessionStorage: the login is forgotten when the tab or browser is closed
+try{Object.keys(localStorage).filter(k=>k.startsWith('sb-')).forEach(k=>localStorage.removeItem(k))}catch(e){}
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{storage:window.sessionStorage,persistSession:true,autoRefreshToken:true}});
+let db={items:[],sales:[],cut:20,seq:0},role=null,idleT;
 const chk=r=>{if(r.error)toast('Save failed: '+r.error.message)};
 const dbItem=async i=>chk(await sb.from('items').upsert(i));
 const dbDel=async id=>chk(await sb.from('items').delete().eq('id',id));
 const dbSet=async()=>chk(await sb.from('settings').upsert({id:1,cut:db.cut,seq:db.seq}));
-async function dbSale(s,ids){chk(await sb.from('sales').insert(s));await Promise.all([...new Set(ids)].map(id=>dbItem(db.items.find(i=>i.id===id))))}
-async function load(){const[a,b,c]=await Promise.all([sb.from('items').select('*'),sb.from('sales').select('*').order('ts',{ascending:false}).limit(1000),sb.from('settings').select('*').eq('id',1).maybeSingle()]);
- if(a.error||b.error){toast('Load failed: '+(a.error||b.error).message);return}
- db.items=a.data;db.sales=b.data;if(c.data){db.cut=+c.data.cut;db.seq=+c.data.seq}}
-async function boot(){if(SUPABASE_URL.startsWith('YOUR')){$('login').hidden=false;$('lerr').textContent='Add your Supabase URL and anon key at the top of the script.';return}
- const{data:{session}}=await sb.auth.getSession();if(!session){$('login').hidden=false;return}
- $('login').hidden=true;await load();render()}
-$('lgo').onclick=async()=>{const{error}=await sb.auth.signInWithPassword({email:$('le').value.trim(),password:$('lpw').value});if(error)$('lerr').textContent=error.message;else{$('lerr').textContent='';boot()}};
-$('lout').onclick=async()=>{await sb.auth.signOut();db.items=[];db.sales=[];render();boot()};
+
+/* ---------- load the barcode drawing library only when needed ---------- */
+const JSB='https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js';let jsbP;
+const loadJSB=()=>window.JsBarcode?Promise.resolve():jsbP||(jsbP=new Promise((ok,no)=>{const e=document.createElement('script');e.src=JSB;e.onload=ok;e.onerror=()=>{jsbP=null;no(new Error('Could not load barcode library'))};document.head.appendChild(e)}));
+
+/* ---------- sign in, roles, auto sign-out ---------- */
+async function load(uid){
+ const[p,a,c]=await Promise.all([sb.from('profiles').select('role').eq('id',uid).maybeSingle(),sb.from('items').select('*'),sb.from('settings').select('*').eq('id',1).maybeSingle()]);
+ if(a.error){toast('Load failed: '+a.error.message);return false}
+ role=(p.data&&p.data.role)||'staff';db.items=a.data;if(c.data){db.cut=+c.data.cut;db.seq=+c.data.seq}return true}
+// staff see only the Sell tab (the database enforces this too)
+function applyRole(){document.querySelectorAll('nav button').forEach(b=>b.hidden=b.dataset.t!=='pos'&&role!=='admin')}
+function showTab(t){document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));['pos','inv','rep','usr'].forEach(i=>$(i).hidden=i!==t);render()}
+function resetUI(){db.items=[];db.sales=[];role=null;cart={parts:[],labor:[]};['le','lpw','q','ld','la','lm','lp','cash','ue','up','fc','fn','fcost','fprice','fs','iq'].forEach(i=>$(i).value='');$('fprev').innerHTML=''}
+function showLogin(msg){stopIdle();resetUI();$('lerr').textContent=msg||'';$('login').hidden=false;$('lout').hidden=true;applyRole();showTab('pos')}
+async function boot(){
+ if(SUPABASE_URL.startsWith('YOUR')){$('lerr').textContent='Add your Supabase URL and anon key at the top of app.js.';return}
+ const{data:{session}}=await sb.auth.getSession();
+ if(!session){showLogin();return}
+ if(!await load(session.user.id)){showLogin('Could not load data. Please sign in again.');return}
+ $('login').hidden=true;$('lout').hidden=false;applyRole();startIdle();showTab('pos')}
+$('lgo').onclick=async()=>{$('lgo').disabled=true;const{error}=await sb.auth.signInWithPassword({email:$('le').value.trim(),password:$('lpw').value});$('lgo').disabled=false;
+ if(error)$('lerr').textContent=error.message;else{$('lpw').value='';boot()}};
+$('lpw').onkeydown=e=>{if(e.key==='Enter')$('lgo').click()};
+async function signOut(msg){await sb.auth.signOut({scope:'local'});showLogin(msg)}
+$('lout').onclick=()=>signOut();
+const idleEv=['click','keydown','touchstart','pointermove'];
+function idleReset(){clearTimeout(idleT);idleT=setTimeout(()=>signOut('Signed out after '+IDLE_MIN+' minutes of inactivity.'),IDLE_MIN*60000)}
+function startIdle(){stopIdle();idleEv.forEach(e=>addEventListener(e,idleReset,{passive:true}));idleReset()}
+function stopIdle(){clearTimeout(idleT);idleEv.forEach(e=>removeEventListener(e,idleReset))}
 let cart={parts:[],labor:[]};
 function toast(m){const t=$('toast');t.textContent=m;t.hidden=false;clearTimeout(toast.h);toast.h=setTimeout(()=>t.hidden=true,3200)}
-function bc(el,code,h){el.innerHTML='';if(!code)return;const s=document.createElementNS('http://www.w3.org/2000/svg','svg');el.appendChild(s);try{JsBarcode(s,code,{format:'CODE128',height:h||50,displayValue:true,fontSize:14,margin:4})}catch(e){el.textContent='Cannot draw barcode'}}
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));['pos','inv','rep'].forEach(t=>$(t).hidden=t!==b.dataset.t);render()});
+function bc(el,code,h){el.innerHTML='';if(!code)return;if(!window.JsBarcode){loadJSB().then(()=>bc(el,code,h)).catch(e=>{el.textContent=e.message});return}const s=document.createElementNS('http://www.w3.org/2000/svg','svg');el.appendChild(s);try{JsBarcode(s,code,{format:'CODE128',height:h||50,displayValue:true,fontSize:14,margin:4})}catch(e){el.textContent='Cannot draw barcode'}}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>showTab(b.dataset.t));
 
 /* ---------- camera scanner ---------- */
 let stream,timer,reader,det,onCode,keep,last='',lt=0;
+const loadZX=()=>window.ZXing?Promise.resolve():new Promise((ok,no)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';s.onload=ok;s.onerror=no;document.head.appendChild(s)});
 function beep(){try{const a=new (window.AudioContext||window.webkitAudioContext)(),o=a.createOscillator();o.frequency.value=900;o.connect(a.destination);o.start();setTimeout(()=>{o.stop();a.close()},110)}catch(e){}}
 function stopCam(){clearInterval(timer);if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}if(reader){try{reader.reset()}catch(e){}reader=null}}
 function closeScan(){stopCam();$('scm').hidden=true}
@@ -34,7 +60,7 @@ try{
   stream=await navigator.mediaDevices.getUserMedia({video:id?{deviceId:{exact:id}}:{facingMode:'environment'}});
   const v=$('vid');v.srcObject=stream;await v.play();
   timer=setInterval(()=>{det.detect(v).then(r=>r[0]&&hit(r[0].rawValue)).catch(()=>{})},250);
- }else{reader=new ZXing.BrowserMultiFormatReader();reader.decodeFromVideoDevice(id||null,'vid',r=>{if(r)hit(r.getText())});await new Promise(r=>setTimeout(r,600))}
+ }else{await loadZX();reader=new ZXing.BrowserMultiFormatReader();reader.decodeFromVideoDevice(id||null,'vid',r=>{if(r)hit(r.getText())});await new Promise(r=>setTimeout(r,600))}
  const devs=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput'),sel=$('camsel'),cur=sel.value;
  sel.innerHTML=devs.map((d,i)=>`<option value="${esc(d.deviceId)}">${esc(d.label||'Camera '+(i+1))}</option>`).join('');
  if(cur&&devs.some(d=>d.deviceId===cur))sel.value=cur;
@@ -74,12 +100,16 @@ function renderPos(){const v=$('q').value.trim().toLowerCase();
  <div class="tot mu"><span>Mechanic pay</span><span>${peso(t.mech)}</span></div><div class="tot ok"><b>Total profit</b><b>${peso(t.profit)}</b></div>
  <div class="tot big"><span>Total due</span><span>${peso(t.total)}</span></div>`}
 $('clr').onclick=()=>{cart={parts:[],labor:[]};render()};
-$('pay').onclick=()=>{const c=cartView();if(!c.parts.length&&!c.labor.length){toast('The sale is empty');return}
+$('pay').onclick=async()=>{const c=cartView();if(!c.parts.length&&!c.labor.length){toast('The sale is empty');return}
  const t=calc(c);let cash=parseFloat($('cash').value);if(isNaN(cash))cash=t.total;
  if(cash<t.total){toast('Cash is short by '+peso(t.total-cash));return}
+ $('pay').disabled=true;
+ // the database recomputes prices, stock and profit, so they cannot be tampered with
+ const r=await sb.rpc('complete_sale',{p_parts:c.parts.map(p=>({id:p.id,qty:p.qty})),p_labor:c.labor,p_cash:cash});
+ $('pay').disabled=false;
+ if(r.error){toast(r.error.message);const f=await sb.from('items').select('*');if(f.data)db.items=f.data;render();return}
  c.parts.forEach(p=>{db.items.find(i=>i.id===p.id).stock-=p.qty});
- db.sales.unshift({id:Date.now(),ts:Date.now(),parts:c.parts.map(({name,qty,price,cost})=>({name,qty,price,cost})),labor:c.labor,...t,cash});
- dbSale(db.sales[0],c.parts.map(p=>p.id));cart={parts:[],labor:[]};$('cash').value='';render();toast('Sale saved. Change: '+peso(cash-t.total))};
+ cart={parts:[],labor:[]};$('cash').value='';render();toast('Sale saved. Change: '+peso(cash-t.total))};
 
 /* ---------- inventory ---------- */
 function genCode(){let c;do{db.seq++;c='MC'+String(db.seq).padStart(6,'0')}while(find(c));return c}
@@ -97,24 +127,41 @@ $('fsave').onclick=()=>{const code=$('fc').value.trim(),name=$('fn').value.trim(
  dbItem(id?db.items.find(i=>i.id===id):db.items[db.items.length-1]);dbSet();resetForm();render();toast('Item saved')};
 function edit(id){const i=db.items.find(x=>x.id===id);$('fid').value=i.id;$('fc').value=i.code;$('fn').value=i.name;$('fcost').value=i.cost;$('fprice').value=i.price;$('fs').value=i.stock;$('fl').value=i.low;$('fh').textContent='Edit item';bc($('fprev'),i.code);scrollTo(0,0)}
 $('iq').oninput=renderInv;
-function renderInv(){const v=$('iq').value.trim().toLowerCase(),m=db.items.filter(i=>!v||i.name.toLowerCase().includes(v)||i.code.toLowerCase().includes(v));
+function renderInv(){if($('inv').hidden)return;const v=$('iq').value.trim().toLowerCase(),m=db.items.filter(i=>!v||i.name.toLowerCase().includes(v)||i.code.toLowerCase().includes(v));
  $('itbl').innerHTML=m.length?`<table><tr><th>Item</th><th>Cost</th><th>Price</th><th>Stock</th><th></th></tr>${m.map(i=>`<tr><td><b>${esc(i.name)}</b><div class="mu">${esc(i.code)}</div></td><td>${peso(i.cost)}</td><td>${peso(i.price)}</td><td class="${i.stock<=i.low?'bad':''}">${i.stock}${i.stock<=i.low?'<div class="mu bad">low</div>':''}</td><td style="white-space:nowrap"><button class="g" data-e="${i.id}">Edit</button> <button class="g" data-s="${i.id}">+Stock</button> <button class="g" data-b="${i.id}">Label</button> <button class="x" data-d="${i.id}">Delete</button></td></tr>`).join('')}</table>`:'<p class="mu">No items yet. Scan a barcode or fill the form to add one.</p>';
  const q=(a,f)=>$('itbl').querySelectorAll(`[data-${a}]`).forEach(b=>b.onclick=()=>f(b.dataset[a]));
  q('e',edit);
  q('s',id=>{const n=parseInt(prompt('Add how many units?'));if(n>0){db.items.find(i=>i.id===id).stock+=n;dbItem(db.items.find(i=>i.id===id));render()}});
- q('b',id=>{const i=db.items.find(x=>x.id===id),n=parseInt(prompt('How many labels to print?','1'))||1;$('lbl').innerHTML=Array(Math.min(n,60)).fill(`<div style="display:inline-block;margin:6px;padding:6px;border:1px dashed #999"><div style="font-size:12px"><b>${esc(i.name)}</b> ${peso(i.price)}</div><div class="lb"></div></div>`).join('');$('lbl').querySelectorAll('.lb').forEach(e=>bc(e,i.code,40));setTimeout(()=>print(),150)});
+ q('b',id=>{const i=db.items.find(x=>x.id===id),n=parseInt(prompt('How many labels to print?','1'))||1;$('lbl').innerHTML=Array(Math.min(n,60)).fill(`<div style="display:inline-block;margin:6px;padding:6px;border:1px dashed #999"><div style="font-size:12px"><b>${esc(i.name)}</b> ${peso(i.price)}</div><div class="lb"></div></div>`).join('');$('lbl').querySelectorAll('.lb').forEach(e=>bc(e,i.code,40));loadJSB().then(()=>setTimeout(()=>print(),150))});
  q('d',id=>{if(confirm('Delete this item?')){db.items=db.items.filter(i=>i.id!==id);dbDel(id);render()}})}
 
 /* ---------- reports ---------- */
 $('per').onchange=renderRep;
 $('dcut').onchange=()=>{const p=parseFloat($('dcut').value);if(p>=0&&p<=100){db.cut=p;dbSet();$('lp').placeholder=p}};
-function renderRep(){const n=new Date(),d0=new Date(n.getFullYear(),n.getMonth(),n.getDate()).getTime(),p=$('per').value;
+let repSeq=0;
+async function renderRep(){if($('rep').hidden)return;
+ const n=new Date(),d0=new Date(n.getFullYear(),n.getMonth(),n.getDate()).getTime(),p=$('per').value;
  const from=p==='d'?d0:p==='w'?d0-6*864e5:p==='m'?new Date(n.getFullYear(),n.getMonth(),1).getTime():0;
- const s=db.sales.filter(x=>x.ts>=from),sum=k=>s.reduce((a,x)=>a+x[k],0);
- $('dcut').value=db.cut;
+ $('dcut').value=db.cut;const q=++repSeq;
+ const r=await sb.from('sales').select('id,ts,parts,labor,total,pp,lab,cut,mech,profit').gte('ts',from).order('ts',{ascending:false}).limit(2000);
+ if(q!==repSeq)return;if(r.error){toast('Load failed: '+r.error.message);return}
+ const s=r.data,sum=k=>s.reduce((a,x)=>a+Number(x[k]),0);
  const st=[['Sales',s.length],['Revenue',peso(sum('total'))],['Parts profit',peso(sum('pp'))],['Labor collected',peso(sum('lab'))],['Shop cut of labor',peso(sum('cut'))],['Paid to mechanics',peso(sum('mech'))]];
  $('stats').innerHTML=st.map(([a,b])=>`<div class="stat"><span class="mu">${a}</span><b>${b}</b></div>`).join('')+`<div class="stat hi"><span class="mu">Total profit (parts + shop cut)</span><b>${peso(sum('profit'))}</b></div>`;
  $('stbl').innerHTML=s.length?`<table><tr><th>Date</th><th>Details</th><th>Total</th><th>Profit</th></tr>${s.slice(0,100).map(x=>`<tr><td>${new Date(x.ts).toLocaleString('en-PH',{dateStyle:'short',timeStyle:'short'})}</td><td class="mu">${x.parts.map(p=>esc(p.name)+' ×'+p.qty).concat(x.labor.map(l=>esc(l.desc)+' ('+esc(l.mech)+')')).join(', ')}</td><td>${peso(x.total)}</td><td class="ok">${peso(x.profit)}</td></tr>`).join('')}</table>`:'<p class="mu">No sales in this period.</p>'}
 
-function render(){$('lp').placeholder=db.cut;renderPos();renderInv();renderRep()}
+/* ---------- users (admin only) ---------- */
+async function adminCall(body){const{data,error}=await sb.functions.invoke('manage-users',{body});
+ if(error){let m=error.message;try{m=(await error.context.json()).error||m}catch(e){}throw new Error(m)}
+ if(data&&data.error)throw new Error(data.error);return data}
+async function renderUsr(){if($('usr').hidden)return;
+ const r=await sb.from('profiles').select('id,email,role').order('created_at');if(r.error){toast(r.error.message);return}
+ const me=(await sb.auth.getSession()).data.session?.user.id;
+ $('utbl').innerHTML=`<table><tr><th>Email</th><th>Role</th><th></th></tr>${r.data.map(u=>`<tr><td>${esc(u.email)}</td><td>${esc(u.role)}</td><td style="white-space:nowrap">${u.id===me?'<span class="mu">you</span>':`<button class="g" data-pw="${u.id}">New password</button> <button class="x" data-rm="${u.id}">Remove</button>`}</td></tr>`).join('')}</table>`;
+ $('utbl').querySelectorAll('[data-pw]').forEach(b=>b.onclick=async()=>{const p=prompt('New password (at least 8 characters)');if(!p)return;try{await adminCall({action:'password',id:b.dataset.pw,password:p});toast('Password changed')}catch(e){toast(e.message)}});
+ $('utbl').querySelectorAll('[data-rm]').forEach(b=>b.onclick=async()=>{if(!confirm('Remove this user? They will no longer be able to sign in.'))return;try{await adminCall({action:'delete',id:b.dataset.rm});renderUsr()}catch(e){toast(e.message)}})}
+$('uadd').onclick=async()=>{const email=$('ue').value.trim(),password=$('up').value;if(!email||!password){toast('Enter an email and a password');return}
+ try{await adminCall({action:'create',email,password});$('ue').value=$('up').value='';toast('User added. They can only use the Sell tab.');renderUsr()}catch(e){toast(e.message)}};
+
+function render(){$('lp').placeholder=db.cut;renderPos();renderInv();renderRep();renderUsr()}
 render();boot();

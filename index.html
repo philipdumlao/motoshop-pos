@@ -2,12 +2,12 @@
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Motoshop POS</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<link rel="preconnect" href="https://rfterllaaarworlwlyfu.supabase.co">
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <link rel="stylesheet" href="style.css"></head><body>
 <header><h1>MOTOSHOP POS</h1>
-<button class="g" id="lout" style="color:inherit;border-color:#888">Sign out</button><nav><button data-t="pos" class="on">Sell</button><button data-t="inv">Inventory</button><button data-t="rep">Reports</button></nav></header>
+<button class="g" id="lout" style="color:inherit;border-color:#888">Sign out</button><nav><button data-t="pos" class="on">Sell</button><button data-t="inv" hidden>Inventory</button><button data-t="rep" hidden>Reports</button><button data-t="usr" hidden>Users</button></nav></header>
 <main>
 <section id="pos"><div class="grid">
 <div><div class="card"><h2>Add parts</h2>
@@ -44,11 +44,18 @@
 <div><label>Default shop cut % on labor</label><input id="dcut" type="number" min="0" max="100" step="any"></div></div>
 <div class="stats" id="stats"></div>
 <div class="card"><h2>Sales</h2><div class="sc" id="stbl"></div></div></section>
+<section id="usr" hidden><div class="grid">
+<div class="card"><h2>Add staff user</h2>
+<label>Email</label><input id="ue" type="email" autocomplete="off">
+<label style="margin-top:8px">Temporary password (at least 8 characters)</label><input id="up" type="text" autocomplete="off">
+<div class="row" style="margin-top:12px"><button class="b" id="uadd">Add user</button></div>
+<p class="mu">Staff can only use the Sell tab. Only admins see Inventory, Reports and Users.</p></div>
+<div class="card"><h2>Users</h2><div class="sc" id="utbl"></div></div></div></section>
 </main>
 
 <div id="scm" hidden><div class="box"><div class="row" style="margin-bottom:8px"><div><label>Camera (built-in or external)</label><select id="camsel"></select></div><button class="g fit" id="scx">Close</button></div>
 <video id="vid" playsinline muted></video><p class="mu" id="scmsg" style="margin:8px 0 0">Point the camera at a barcode.</p></div></div>
-<div id="login" hidden style="position:fixed;inset:0;background:var(--bg);z-index:70;display:flex;align-items:center;justify-content:center;padding:14px"><div class="card" style="width:min(360px,100%)"><h2>Sign in to Motoshop POS</h2><label>Email</label><input id="le" type="email" autocomplete="username"><label style="margin-top:8px">Password</label><input id="lpw" type="password" autocomplete="current-password"><p class="bad" id="lerr"></p><button class="b" id="lgo">Sign in</button></div></div>
+<div id="login" style="position:fixed;inset:0;background:var(--bg);z-index:70;display:flex;align-items:center;justify-content:center;padding:14px"><div class="card" style="width:min(360px,100%)"><h2>Sign in to Motoshop POS</h2><label>Email</label><input id="le" type="email" autocomplete="username"><label style="margin-top:8px">Password</label><input id="lpw" type="password" autocomplete="current-password"><p class="bad" id="lerr"></p><button class="b" id="lgo">Sign in</button></div></div>
 <div id="toast" hidden></div><div id="lbl"></div>
 
-<script src="app.js"></script></body></html>
+<script defer src="app.js"></script></body></html>
