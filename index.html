@@ -10,8 +10,8 @@ addEventListener('error',function(e){var m=document.getElementById('lerr'),l=doc
 m.textContent=(t&&t.src?'Could not load '+t.src.split('/').pop().split('?')[0]:'Error: '+(e.message||'unknown'))+'. Press Ctrl+F5 to refresh, or check your internet.'},true);
 </script>
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<link rel="stylesheet" href="style.css?v=5"></head><body>
-<header><h1>MOTOSHOP POS</h1>
+<link rel="stylesheet" href="style.css?v=6"></head><body>
+<header><h1>MOTOSHOP POS</h1><span id="shopn" style="opacity:.75"></span>
 <button class="g" id="pwb" hidden style="color:inherit;border-color:#888">Change password</button><button class="g" id="lout" hidden style="color:inherit;border-color:#888">Sign out</button><nav><button data-t="pos" class="on">Sell</button><button data-t="inv" hidden>Inventory</button><button data-t="rep" hidden>Reports</button><button data-t="usr" hidden>Users</button></nav></header>
 <main>
 <section id="pos"><div class="grid">
@@ -55,13 +55,14 @@ m.textContent=(t&&t.src?'Could not load '+t.src.split('/').pop().split('?')[0]:'
 <label>Email</label><input id="ue" type="email" autocomplete="off">
 <label style="margin-top:8px">Temporary password (at least 8 characters)</label><input id="up" type="text" autocomplete="off">
 <div class="row" style="margin-top:12px"><button class="b" id="uadd">Add user</button></div>
-<p class="mu">Staff can only use the Sell tab. Only admins see Inventory, Reports and Users.</p></div>
+<p class="mu">Staff can only use the Sell tab. Only the shop owner sees Inventory, Reports and Users.</p></div>
 <div class="card"><h2>Users</h2><div class="sc" id="utbl"></div></div></div></section>
 </main>
 
 <div id="scm" hidden><div class="box"><div class="row" style="margin-bottom:8px"><div><label>Camera (built-in or external)</label><select id="camsel"></select></div><button class="g fit" id="scx">Close</button></div>
 <video id="vid" playsinline muted></video><p class="mu" id="scmsg" style="margin:8px 0 0">Point the camera at a barcode.</p></div></div>
-<div id="login" style="position:fixed;inset:0;background:var(--bg);z-index:70;display:flex;align-items:center;justify-content:center;padding:14px"><div class="card" style="width:min(360px,100%)"><h2>Sign in to Motoshop POS</h2><label>Email</label><input id="le" type="email" autocomplete="username"><label style="margin-top:8px">Password</label><input id="lpw" type="password" autocomplete="current-password"><p class="mu" id="lload">Checking your session…</p><p class="bad" id="lerr"></p><button class="b" id="lgo">Sign in</button></div></div>
+<div id="login" style="position:fixed;inset:0;background:var(--bg);z-index:70;display:flex;align-items:center;justify-content:center;padding:14px"><div class="card" style="width:min(360px,100%)"><h2 id="lh">Sign in to Motoshop POS</h2><label>Email</label><input id="le" type="email" autocomplete="username"><label style="margin-top:8px">Password</label><input id="lpw" type="password" autocomplete="current-password"><div id="lpw2w" hidden><label style="margin-top:8px">Confirm password</label><input id="lpw2" type="password" autocomplete="new-password"></div><p class="mu" id="lload">Checking your session…</p><p class="bad" id="lerr"></p><div class="row"><button class="b" id="lgo">Sign in</button></div><p style="margin:12px 0 0"><button class="x" id="lmode" style="color:var(--ac)">New shop? Create a free account</button></p></div></div>
+<div id="setup" hidden style="position:fixed;inset:0;background:var(--bg);z-index:70;display:flex;align-items:center;justify-content:center;padding:14px"><div class="card" style="width:min(380px,100%)"><h2>Set up your shop</h2><p class="mu">Welcome! What is your shop called? You can add staff later.</p><label>Shop name</label><input id="sn" maxlength="80" placeholder="e.g. Dela Cruz Motorcycle Parts"><p class="bad" id="serr"></p><div class="row"><button class="b" id="sgo">Create my shop</button><button class="g" id="sout">Sign out</button></div></div></div>
 <div id="pwm" hidden style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:65;display:flex;align-items:center;justify-content:center;padding:14px"><div class="card" style="width:min(380px,100%)"><h2>Change password</h2>
 <label>Current password</label><input id="pwc" type="password" autocomplete="current-password">
 <label style="margin-top:8px">New password (at least 8 characters)</label><input id="pwn" type="password" autocomplete="new-password">
@@ -69,4 +70,4 @@ m.textContent=(t&&t.src?'Could not load '+t.src.split('/').pop().split('?')[0]:'
 <p class="bad" id="pwe"></p><div class="row"><button class="b" id="pws">Save password</button><button class="g" id="pwx">Cancel</button></div></div></div>
 <div id="toast" hidden></div><div id="lbl"></div>
 
-<script defer src="app.js?v=5"></script></body></html>
+<script defer src="app.js?v=6"></script></body></html>
