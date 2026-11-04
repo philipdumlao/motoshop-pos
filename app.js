@@ -11,7 +11,7 @@ let db={items:[],sales:[],cut:20,seq:0},role=null,idleT;
 const chk=r=>{if(r.error)toast('Save failed: '+r.error.message)};
 const dbItem=async i=>chk(await sb.from('items').upsert(i));
 const dbDel=async id=>chk(await sb.from('items').delete().eq('id',id));
-const dbSet=async()=>chk(await sb.from('settings').upsert({id:1,cut:db.cut,seq:db.seq}));
+const dbSet=async()=>chk(await sb.from('shops').update({default_cut:db.cut,seq:db.seq}).eq('id',db.shop));
 
 /* ---------- load the barcode drawing library only when needed ---------- */
 const JSB='https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js';let jsbP;
@@ -19,14 +19,16 @@ const loadJSB=()=>window.JsBarcode?Promise.resolve():jsbP||(jsbP=new Promise((ok
 
 /* ---------- sign in, roles, auto sign-out ---------- */
 async function load(uid){
- const[p,a,c]=await Promise.all([sb.from('profiles').select('role').eq('id',uid).maybeSingle(),sb.from('items').select('*'),sb.from('settings').select('*').eq('id',1).maybeSingle()]);
- if(a.error){toast('Load failed: '+a.error.message);return false}
- role=(p.data&&p.data.role)||'staff';db.items=a.data;if(c.data){db.cut=+c.data.cut;db.seq=+c.data.seq}return true}
+ // RLS returns only this shop's rows, so no shop id needs to be sent
+ const[m,a]=await Promise.all([sb.from('shop_members').select('role,shop_id,shops(name,default_cut,seq)').eq('user_id',uid).maybeSingle(),sb.from('items').select('*')]);
+ if(m.error||a.error){toast('Load failed: '+(m.error||a.error).message);return false}
+ if(!m.data)return 'setup'; // signed up, but no shop created yet
+ const sh=m.data.shops;role=m.data.role;db.shop=m.data.shop_id;db.shopName=sh.name;db.cut=+sh.default_cut;db.seq=+sh.seq;db.items=a.data;return true}
 // staff see only the Sell tab (the database enforces this too)
-function applyRole(){document.querySelectorAll('nav button').forEach(b=>b.hidden=b.dataset.t!=='pos'&&role!=='admin')}
+function applyRole(){document.querySelectorAll('nav button').forEach(b=>b.hidden=b.dataset.t!=='pos'&&role!=='owner')}
 function showTab(t){document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));['pos','inv','rep','usr'].forEach(i=>$(i).hidden=i!==t);render()}
-function resetUI(){db.items=[];db.sales=[];role=null;cart={parts:[],labor:[]};['le','lpw','q','ld','la','lm','lp','cash','ue','up','fc','fn','fcost','fprice','fs','iq','pwc','pwn','pwn2'].forEach(i=>$(i).value='');$('fprev').innerHTML='';try{sessionStorage.removeItem('moto-cache')}catch(e){}}
-function showLogin(msg){stopIdle();closePw();resetUI();$('lload').hidden=true;$('pwb').hidden=true;$('lerr').textContent=msg||'';$('login').hidden=false;$('lout').hidden=true;applyRole();showTab('pos')}
+function resetUI(){db.items=[];db.sales=[];role=null;cart={parts:[],labor:[]};['le','lpw','q','ld','la','lm','lp','cash','ue','up','fc','fn','fcost','fprice','fs','iq','pwc','pwn','pwn2','lpw2','sn'].forEach(i=>$(i).value='');$('fprev').innerHTML='';try{sessionStorage.removeItem('moto-cache')}catch(e){}}
+function showLogin(msg){stopIdle();$('setup').hidden=true;setMode(false);closePw();resetUI();$('lload').hidden=true;$('pwb').hidden=true;$('lerr').textContent=msg||'';$('login').hidden=false;$('lout').hidden=true;applyRole();showTab('pos')}
 let curUid;
 function enter(){$('login').hidden=true;$('lout').hidden=false;$('pwb').hidden=false;applyRole();startIdle();showTab('pos')}
 async function boot(){
@@ -36,13 +38,32 @@ async function boot(){
  curUid=session.user.id;
  // show the last known data at once, then refresh it in the background
  let c=null;try{c=JSON.parse(sessionStorage.getItem('moto-cache'))}catch(e){}
- if(c&&c.uid===curUid){role=c.role;db.items=c.items;db.cut=c.cut;db.seq=c.seq;enter()}else c=null;
- if(!await load(curUid)){if(!c)showLogin('Could not load data. Please sign in again.');return}
- if(c){applyRole();role==='admin'?render():showTab('pos')}else enter()}
-addEventListener('pagehide',()=>{if(role)try{sessionStorage.setItem('moto-cache',JSON.stringify({uid:curUid,role,items:db.items,cut:db.cut,seq:db.seq}))}catch(e){}});
-$('lgo').onclick=async()=>{$('lgo').disabled=true;$('lerr').textContent='';$('lload').hidden=false;$('lload').textContent='Signing in…';
- const{error}=await sb.auth.signInWithPassword({email:$('le').value.trim(),password:$('lpw').value});$('lgo').disabled=false;
- if(error){$('lload').hidden=true;$('lerr').textContent=error.message}else{$('lpw').value='';$('lload').textContent='Loading shop data…';boot()}};
+ if(c&&c.uid===curUid){role=c.role;db.shop=c.shop;db.shopName=c.shopName;db.items=c.items;db.cut=c.cut;db.seq=c.seq;enter()}else c=null;
+ const r=await load(curUid);
+ if(r==='setup'){showSetup();return}
+ if(!r){if(!c)showLogin('Could not load data. Please sign in again.');return}
+ if(c){applyRole();role==='owner'?render():showTab('pos')}else enter()}
+addEventListener('pagehide',()=>{if(role)try{sessionStorage.setItem('moto-cache',JSON.stringify({uid:curUid,role,shop:db.shop,shopName:db.shopName,items:db.items,cut:db.cut,seq:db.seq}))}catch(e){}});
+let signup=false;
+function setMode(on){signup=on;$('lh').textContent=on?'Create your free shop account':'Sign in to Motoshop POS';$('lpw2w').hidden=!on;$('lgo').textContent=on?'Create account':'Sign in';$('lmode').textContent=on?'Already have an account? Sign in':'New shop? Create a free account';$('lerr').textContent='';$('lpw').autocomplete=on?'new-password':'current-password'}
+$('lmode').onclick=()=>setMode(!signup);
+$('lgo').onclick=async()=>{const email=$('le').value.trim(),pw=$('lpw').value,err=t=>{$('lload').hidden=true;$('lerr').textContent=t};
+ $('lerr').textContent='';
+ if(signup){if(!email){err('Enter your email.');return}if(pw.length<8){err('Password must be at least 8 characters.');return}if(pw!==$('lpw2').value){err('The passwords do not match.');return}}
+ $('lgo').disabled=true;$('lload').hidden=false;$('lload').textContent=signup?'Creating your account…':'Signing in…';
+ if(signup){
+  const{data,error}=await sb.auth.signUp({email,password:pw,options:{emailRedirectTo:location.origin+location.pathname}});$('lgo').disabled=false;
+  if(error){err(error.message);return}
+  if(data.session){$('lpw').value=$('lpw2').value='';boot();return}
+  setMode(false);$('lpw').value='';$('lload').hidden=false;$('lload').textContent='Almost done! Open the confirmation link we emailed you, then sign in here.';return}
+ const{error}=await sb.auth.signInWithPassword({email,password:pw});$('lgo').disabled=false;
+ if(error)err(error.message);else{$('lpw').value='';$('lload').textContent='Loading shop data…';boot()}};
+function showSetup(){stopIdle();$('login').hidden=true;$('setup').hidden=false;$('serr').textContent='';$('sn').focus()}
+$('sgo').onclick=async()=>{const n=$('sn').value.trim();if(!n){$('serr').textContent='Enter your shop name.';return}
+ $('sgo').disabled=true;const r=await sb.rpc('create_shop',{p_name:n});$('sgo').disabled=false;
+ if(r.error){$('serr').textContent=r.error.message;return}
+ $('setup').hidden=true;$('login').hidden=false;$('lload').hidden=false;$('lload').textContent='Opening your shop…';boot()};
+$('sout').onclick=()=>signOut();
 $('lpw').onkeydown=e=>{if(e.key==='Enter')$('lgo').click()};
 async function signOut(msg){await sb.auth.signOut({scope:'local'});showLogin(msg)}
 $('lout').onclick=()=>signOut();
@@ -181,13 +202,13 @@ async function adminCall(body){const{data,error}=await sb.functions.invoke('mana
  if(error){let m=error.message;try{m=(await error.context.json()).error||m}catch(e){}throw new Error(m)}
  if(data&&data.error)throw new Error(data.error);return data}
 async function renderUsr(){if($('usr').hidden)return;
- const r=await sb.from('profiles').select('id,email,role').order('created_at');if(r.error){toast(r.error.message);return}
+ const r=await sb.from('shop_members').select('user_id,email,role').order('created_at');if(r.error){toast(r.error.message);return}
  const me=(await sb.auth.getSession()).data.session?.user.id;
- $('utbl').innerHTML=`<table><tr><th>Email</th><th>Role</th><th></th></tr>${r.data.map(u=>`<tr><td>${esc(u.email)}</td><td>${esc(u.role)}</td><td style="white-space:nowrap">${u.id===me?'<span class="mu">you</span>':`<button class="g" data-pw="${u.id}">New password</button> <button class="x" data-rm="${u.id}">Remove</button>`}</td></tr>`).join('')}</table>`;
+ $('utbl').innerHTML=`<table><tr><th>Email</th><th>Role</th><th></th></tr>${r.data.map(u=>`<tr><td>${esc(u.email)}</td><td>${esc(u.role)}</td><td style="white-space:nowrap">${u.role==='owner'?'<span class="mu">'+(u.user_id===me?'you':'owner')+'</span>':`<button class="g" data-pw="${u.user_id}">New password</button> <button class="x" data-rm="${u.user_id}">Remove</button>`}</td></tr>`).join('')}</table>`;
  $('utbl').querySelectorAll('[data-pw]').forEach(b=>b.onclick=async()=>{const p=prompt('New password (at least 8 characters)');if(!p)return;try{await adminCall({action:'password',id:b.dataset.pw,password:p});toast('Password changed')}catch(e){toast(e.message)}});
  $('utbl').querySelectorAll('[data-rm]').forEach(b=>b.onclick=async()=>{if(!confirm('Remove this user? They will no longer be able to sign in.'))return;try{await adminCall({action:'delete',id:b.dataset.rm});renderUsr()}catch(e){toast(e.message)}})}
 $('uadd').onclick=async()=>{const email=$('ue').value.trim(),password=$('up').value;if(!email||!password){toast('Enter an email and a password');return}
  try{await adminCall({action:'create',email,password});$('ue').value=$('up').value='';toast('User added. They can only use the Sell tab.');renderUsr()}catch(e){toast(e.message)}};
 
-function render(){$('lp').placeholder=db.cut;renderPos();renderInv();renderRep();renderUsr()}
+function render(){$('lp').placeholder=db.cut;$('shopn').textContent=db.shopName?'· '+db.shopName:'';renderPos();renderInv();renderRep();renderUsr()}
 render();boot();
