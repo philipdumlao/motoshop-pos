@@ -27,8 +27,8 @@ async function load(uid){
 // staff see only the Sell tab (the database enforces this too)
 function applyRole(){document.querySelectorAll('nav button').forEach(b=>b.hidden=b.dataset.t!=='pos'&&role!=='owner')}
 function showTab(t){document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));['pos','inv','rep','usr'].forEach(i=>$(i).hidden=i!==t);render()}
-function resetUI(){db.items=[];db.sales=[];role=null;cart={parts:[],labor:[]};['le','lpw','q','ld','la','lm','lp','cash','ue','up','fc','fn','fcost','fprice','fs','iq','pwc','pwn','pwn2','lpw2','sn'].forEach(i=>$(i).value='');$('fprev').innerHTML='';try{sessionStorage.removeItem('moto-cache')}catch(e){}}
-function showLogin(msg){stopIdle();$('setup').hidden=true;setMode(false);closePw();resetUI();$('lload').hidden=true;$('pwb').hidden=true;$('lerr').textContent=msg||'';$('login').hidden=false;$('lout').hidden=true;applyRole();showTab('pos')}
+function resetUI(){db.items=[];db.sales=[];role=null;cart={parts:[],labor:[]};['le','lpw','q','ld','la','lm','lp','cash','ue','up','fc','fn','fcost','fprice','fs','iq','pwc','pwn','pwn2','lpw2','sn','dlc'].forEach(i=>$(i).value='');$('fprev').innerHTML='';try{sessionStorage.removeItem('moto-cache')}catch(e){}}
+function showLogin(msg){stopIdle();$('setup').hidden=true;setMode(false);closePw();closeDel();resetUI();$('lload').hidden=true;$('pwb').hidden=true;$('lerr').textContent=msg||'';$('login').hidden=false;$('lout').hidden=true;applyRole();showTab('pos')}
 let curUid;
 function enter(){$('login').hidden=true;$('lout').hidden=false;$('pwb').hidden=false;applyRole();startIdle();showTab('pos')}
 async function boot(){
@@ -69,7 +69,7 @@ async function signOut(msg){await sb.auth.signOut({scope:'local'});showLogin(msg
 $('lout').onclick=()=>signOut();
 /* ---------- change own password ---------- */
 function closePw(){$('pwm').hidden=true;$('pwe').textContent='';['pwc','pwn','pwn2'].forEach(i=>$(i).value='')}
-$('pwb').onclick=()=>{$('pwm').hidden=false;$('pwc').focus()};
+$('pwb').onclick=async()=>{$('pwm').hidden=false;$('pwc').focus();const u=(await sb.auth.getSession()).data.session?.user;$('acct').textContent=u?'Signed in as '+u.email+(role==='owner'?' (owner)':role==='staff'?' (staff)':''):''};
 $('pwx').onclick=closePw;
 $('pws').onclick=async()=>{const c=$('pwc').value,n=$('pwn').value,e=$('pwe');
  if(!c){e.textContent='Enter your current password.';return}
@@ -83,6 +83,21 @@ $('pws').onclick=async()=>{const c=$('pwc').value,n=$('pwn').value,e=$('pwe');
  const u=await sb.auth.updateUser({password:n});$('pws').disabled=false;
  if(u.error){e.textContent=u.error.message;return}
  closePw();toast('Password changed')};
+/* ---------- delete account + backup (required by the app stores) ---------- */
+function openDel(){const own=role==='owner';
+ $('dlt').textContent=own?'This permanently deletes your shop “'+db.shopName+'”, all its items and sales records, and the login of every staff member. It cannot be undone.':role==='staff'?'This deletes your login. Sales you made stay in the shop’s records, without your name. It cannot be undone.':'This deletes your login. It cannot be undone.';
+ $('dlb').hidden=!own;$('dlc').value='';$('dle').textContent='';$('dlm').hidden=false}
+function closeDel(){$('dlm').hidden=true;$('dlc').value='';$('dle').textContent=''}
+$('deb').onclick=()=>{closePw();openDel()};$('sdel').onclick=openDel;$('dln').onclick=closeDel;
+$('dld').onclick=async()=>{$('dld').disabled=true;
+ const[s,i]=await Promise.all([sb.from('sales').select('*').order('ts'),sb.from('items').select('*')]);$('dld').disabled=false;
+ if(s.error||i.error){$('dle').textContent='Could not read your data. Please try again.';return}
+ const blob=new Blob([JSON.stringify({shop:db.shopName,exported:new Date().toISOString(),items:i.data,sales:s.data},null,2)],{type:'application/json'});
+ const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='motoshop-backup.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast('Backup downloaded')};
+$('dly').onclick=async()=>{if($('dlc').value.trim()!=='DELETE'){$('dle').textContent='Type DELETE in capital letters to confirm.';return}
+ $('dly').disabled=true;const r=await sb.rpc('delete_my_account',{p_confirm:'DELETE'});$('dly').disabled=false;
+ if(r.error){$('dle').textContent=r.error.message;return}
+ closeDel();await signOut('Your account has been deleted.')};
 const idleEv=['click','keydown','touchstart'];
 function idleReset(){clearTimeout(idleT);idleT=setTimeout(()=>signOut('Signed out after '+IDLE_MIN+' minutes of inactivity.'),IDLE_MIN*60000)}
 function startIdle(){stopIdle();idleEv.forEach(e=>addEventListener(e,idleReset,{passive:true}));idleReset()}

@@ -40,3 +40,4 @@ video{width:100%;border-radius:8px;background:#000;max-height:60vh}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--tx);color:var(--bg);padding:10px 16px;border-radius:8px;z-index:60;max-width:90%}
 #lbl{display:none}
 @media print{body>*:not(#lbl){display:none!important}#lbl{display:block;text-align:center;color:#000;background:#fff;font-family:Arial,sans-serif}}
+a{color:var(--ac)}
