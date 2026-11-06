@@ -3,6 +3,7 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const peso=n=>'₱'+Number(n||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2});
 const SUPABASE_URL='https://rfterllaaarworlwlyfu.supabase.co',SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJmdGVybGxhYWFyd29ybHdseWZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0NDUzNjEsImV4cCI6MjEwODAyMTM2MX0.9iuzkjLHdByw128ccDzCRfS4PC7quBHyZmGbdCgKgp4';
 /* ---------- Supabase connection ---------- */
+const TERMS_VERSION='2026-11-05'; // change this date whenever the Terms or Privacy Policy change: everyone must accept again
 const IDLE_MIN=15; // sign out automatically after this many idle minutes
 // sessionStorage: the login is forgotten when the tab or browser is closed
 try{Object.keys(localStorage).filter(k=>k.startsWith('sb-')).forEach(k=>localStorage.removeItem(k))}catch(e){}
@@ -27,8 +28,8 @@ async function load(uid){
 // staff see only the Sell tab (the database enforces this too)
 function applyRole(){document.querySelectorAll('nav button').forEach(b=>b.hidden=b.dataset.t!=='pos'&&role!=='owner')}
 function showTab(t){document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));['pos','inv','rep','usr'].forEach(i=>$(i).hidden=i!==t);render()}
-function resetUI(){db.items=[];db.sales=[];role=null;cart={parts:[],labor:[]};['le','lpw','q','ld','la','lm','lp','cash','ue','up','fc','fn','fcost','fprice','fs','iq','pwc','pwn','pwn2','lpw2','sn','dlc'].forEach(i=>$(i).value='');$('fprev').innerHTML='';try{sessionStorage.removeItem('moto-cache')}catch(e){}}
-function showLogin(msg){stopIdle();$('setup').hidden=true;setMode(false);closePw();closeDel();resetUI();$('lload').hidden=true;$('pwb').hidden=true;$('lerr').textContent=msg||'';$('login').hidden=false;$('lout').hidden=true;applyRole();showTab('pos')}
+function resetUI(){db.items=[];db.sales=[];role=null;cart={parts:[],labor:[]};['le','lpw','q','ld','la','lm','lp','cash','ue','up','fc','fn','fcost','fprice','fs','iq','pwc','pwn','pwn2','lpw2','sn','dlc','tagree'].forEach(i=>$(i).value='');$('fprev').innerHTML='';$('tagree').checked=false;try{sessionStorage.removeItem('moto-cache')}catch(e){}}
+function showLogin(msg){stopIdle();$('tm').hidden=true;$('setup').hidden=true;setMode(false);closePw();closeDel();resetUI();$('lload').hidden=true;$('pwb').hidden=true;$('lerr').textContent=msg||'';$('login').hidden=false;$('lout').hidden=true;applyRole();showTab('pos')}
 let curUid;
 function enter(){$('login').hidden=true;$('lout').hidden=false;$('pwb').hidden=false;applyRole();startIdle();showTab('pos')}
 async function boot(){
@@ -36,6 +37,8 @@ async function boot(){
  const{data:{session}}=await sb.auth.getSession();
  if(!session){showLogin();return}
  curUid=session.user.id;
+ // everyone must have accepted the CURRENT Terms and Privacy Policy before using the app
+ if((session.user.user_metadata||{}).accepted_terms!==TERMS_VERSION){showTerms();return}
  // show the last known data at once, then refresh it in the background
  let c=null;try{c=JSON.parse(sessionStorage.getItem('moto-cache'))}catch(e){}
  if(c&&c.uid===curUid){role=c.role;db.shop=c.shop;db.shopName=c.shopName;db.items=c.items;db.cut=c.cut;db.seq=c.seq;enter()}else c=null;
@@ -45,19 +48,45 @@ async function boot(){
  if(c){applyRole();role==='owner'?render():showTab('pos')}else enter()}
 addEventListener('pagehide',()=>{if(role)try{sessionStorage.setItem('moto-cache',JSON.stringify({uid:curUid,role,shop:db.shop,shopName:db.shopName,items:db.items,cut:db.cut,seq:db.seq}))}catch(e){}});
 let signup=false;
-function setMode(on){signup=on;$('lh').textContent=on?'Create your free shop account':'Sign in to Motoshop POS';$('lpw2w').hidden=!on;$('lgo').textContent=on?'Create account':'Sign in';$('lmode').textContent=on?'Already have an account? Sign in':'New shop? Create a free account';$('lerr').textContent='';$('lpw').autocomplete=on?'new-password':'current-password'}
+function setMode(on){signup=on;$('lh').textContent=on?'Create your free shop account':'Sign in to Motoshop POS';$('lpw2w').hidden=!on;$('lgo').textContent=on?'Create account':'Sign in';$('lmode').textContent=on?'Already have an account? Sign in':'New shop? Create a free account';$('lerr').textContent='';$('lpw').autocomplete=on?'new-password':'current-password';}
 $('lmode').onclick=()=>setMode(!signup);
+/* ---------- Terms pop-up: must be read and accepted BEFORE an account is created or used ---------- */
+let tmDocs={1:false,2:false},tmCur=1,tmYes=null,tmNo=null;
+const TM_URL={1:'terms.html',2:'privacy.html'};
+function tmCheck(){const both=tmDocs[1]&&tmDocs[2];$('tagree').disabled=!both;if(!both){$('tagree').checked=false;$('tgo').disabled=true}$('tc1').textContent=tmDocs[1]?'✓':'';$('tc2').textContent=tmDocs[2]?'✓':''}
+function tmShow(n){tmCur=n;$('tt1').style.borderColor=n===1?'var(--ac)':'';$('tt2').style.borderColor=n===2?'var(--ac)':'';$('tf').src=TM_URL[n]}
+// a document counts as read once its end is reached (or if it is short enough to fit on screen)
+$('tf').onload=()=>{if(($('tf').src||'').indexOf('.html')<0)return;
+ try{const w=$('tf').contentWindow,d=w.document.documentElement,n=tmCur;
+  const done=()=>{if(d.scrollHeight-(w.scrollY+w.innerHeight)<40){tmDocs[n]=true;tmCheck()}};
+  done();w.addEventListener('scroll',done,{passive:true})}catch(e){tmDocs[tmCur]=true;tmCheck()}};
+function askTerms(yes,no){tmDocs={1:false,2:false};tmYes=yes;tmNo=no;$('tagree').checked=false;$('tgo').disabled=true;$('terr').textContent='';tmCheck();$('tm').hidden=false;tmShow(1)}
+$('tt1').onclick=()=>tmShow(1);$('tt2').onclick=()=>tmShow(2);
+$('tagree').onchange=()=>{$('tgo').disabled=!$('tagree').checked};
+$('tgo').onclick=()=>{if(!$('tagree').checked)return;$('tm').hidden=true;const f=tmYes;tmYes=tmNo=null;if(f)f()};
+$('tno').onclick=()=>{$('tm').hidden=true;const f=tmNo;tmYes=tmNo=null;if(f)f()};
+
 $('lgo').onclick=async()=>{const email=$('le').value.trim(),pw=$('lpw').value,err=t=>{$('lload').hidden=true;$('lerr').textContent=t};
  $('lerr').textContent='';
- if(signup){if(!email){err('Enter your email.');return}if(pw.length<8){err('Password must be at least 8 characters.');return}if(pw!==$('lpw2').value){err('The passwords do not match.');return}}
- $('lgo').disabled=true;$('lload').hidden=false;$('lload').textContent=signup?'Creating your account…':'Signing in…';
  if(signup){
-  const{data,error}=await sb.auth.signUp({email,password:pw,options:{emailRedirectTo:location.origin+location.pathname}});$('lgo').disabled=false;
-  if(error){err(error.message);return}
-  if(data.session){$('lpw').value=$('lpw2').value='';boot();return}
-  setMode(false);$('lpw').value='';$('lload').hidden=false;$('lload').textContent='Almost done! Open the confirmation link we emailed you, then sign in here.';return}
+  if(!email){err('Enter your email.');return}if(pw.length<8){err('Password must be at least 8 characters.');return}if(pw!==$('lpw2').value){err('The passwords do not match.');return}
+  // the Terms pop up first: nothing is created and no email is sent unless the person agrees
+  askTerms(()=>doSignUp(email,pw),()=>err('Account not created. You must read and agree to the Terms of Use and Privacy Policy to create an account.'));return}
+ $('lgo').disabled=true;$('lload').hidden=false;$('lload').textContent='Signing in…';
  const{error}=await sb.auth.signInWithPassword({email,password:pw});$('lgo').disabled=false;
  if(error)err(error.message);else{$('lpw').value='';$('lload').textContent='Loading shop data…';boot()}};
+async function doSignUp(email,pw){const err=t=>{$('lload').hidden=true;$('lerr').textContent=t};
+ $('lgo').disabled=true;$('lload').hidden=false;$('lload').textContent='Creating your account…';
+ const{data,error}=await sb.auth.signUp({email,password:pw,options:{emailRedirectTo:location.origin+location.pathname,data:{accepted_terms:TERMS_VERSION,accepted_at:new Date().toISOString()}}});$('lgo').disabled=false;
+ if(error){err(error.message);return}
+ if(data.session){$('lpw').value=$('lpw2').value='';boot();return}
+ setMode(false);$('lpw').value='';$('lload').hidden=false;$('lload').textContent='Almost done! Open the confirmation link we emailed you, then sign in here.'}
+// existing users (and staff added by an owner) must accept the current Terms once before using the app
+function showTerms(){stopIdle();$('setup').hidden=true;$('lload').hidden=false;$('lload').textContent='Please accept the Terms of Use and Privacy Policy to continue.';
+ askTerms(async()=>{const r=await sb.auth.updateUser({data:{accepted_terms:TERMS_VERSION,accepted_at:new Date().toISOString()}});
+   if(r.error){signOut('Could not save your acceptance: '+r.error.message);return}
+   $('lload').textContent='Loading…';boot()},
+  ()=>signOut('You must accept the Terms of Use and Privacy Policy to use Motoshop POS.'))}
 function showSetup(){stopIdle();$('login').hidden=true;$('setup').hidden=false;$('serr').textContent='';$('sn').focus()}
 $('sgo').onclick=async()=>{const n=$('sn').value.trim();if(!n){$('serr').textContent='Enter your shop name.';return}
  $('sgo').disabled=true;const r=await sb.rpc('create_shop',{p_name:n});$('sgo').disabled=false;
