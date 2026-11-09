@@ -10,23 +10,25 @@ addEventListener('error',function(e){var m=document.getElementById('lerr'),l=doc
 m.textContent=(t&&t.src?'Could not load '+t.src.split('/').pop().split('?')[0]:'Error: '+(e.message||'unknown'))+'. Press Ctrl+F5 to refresh, or check your internet.'},true);
 </script>
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<link rel="stylesheet" href="style.css?v=11"></head><body>
-<header><h1>MOTOSHOP POS</h1><span id="shopn" style="opacity:.75"></span>
-<button class="g" id="pwb" hidden style="color:inherit;border-color:#888">Account</button><button class="g" id="lout" hidden style="color:inherit;border-color:#888">Sign out</button><nav><button data-t="pos" class="on">Sell</button><button data-t="inv" hidden>Inventory</button><button data-t="rep" hidden>Reports</button><button data-t="usr" hidden>Users</button></nav></header>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=12"></head><body>
+<header><h1>MOTOSHOP POS</h1><span id="shopn"></span>
+<button class="g hb" id="pwb" hidden>Account</button><button class="g hb" id="lout" hidden>Sign out</button><nav aria-label="Main"><button data-t="pos" class="on"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 6h14l-1.5 9h-11z"/><circle cx="9" cy="19" r="1"/><circle cx="16" cy="19" r="1"/></svg>Sell</button><button data-t="inv" hidden><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8l8-4 8 4v8l-8 4-8-4zM4 8l8 4 8-4M12 12v8"/></svg>Items</button><button data-t="rep" hidden><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>Reports</button><button data-t="usr" hidden><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6.5 6.5 0 0 1 3.5 6"/></svg>Staff</button></nav></header>
 <main>
 <section id="pos"><div class="grid">
-<div><div class="card"><h2>Add parts</h2>
-<div class="row"><div><label>Scan, type barcode, or search name</label><input id="q" placeholder="Barcode or part name" autocomplete="off"></div>
-<button class="b fit" id="posScan">Scan camera</button></div>
+<div><div class="card" id="cparts"><h2>Add parts</h2>
+<button class="b scanbtn" id="posScan"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 9v6M12 9v6M16 9v6"/></svg>Scan a part</button>
+<label for="q" style="margin-top:12px">Or type a barcode / search by name</label><input id="q" placeholder="Barcode or part name" autocomplete="off">
 <div class="list" id="res" style="margin-top:8px"></div></div>
-<div class="card"><h2>Add mechanic labor</h2>
+<div class="card" id="clabor"><h2>Add mechanic labor</h2>
 <div class="row"><div style="flex:2"><label>Job</label><input id="ld" placeholder="e.g. Change oil, tune-up"></div>
 <div><label>Labor (₱)</label><input id="la" type="number" min="0" step="any"></div></div>
 <div class="row" style="margin-top:8px"><div><label>Mechanic</label><input id="lm" placeholder="Name"></div>
 <div><label>Shop cut %</label><input id="lp" type="number" min="0" max="100" step="any"></div>
 <button class="b fit" id="addL">Add labor</button></div>
 <p class="mu" style="margin:8px 0 0">The shop cut is the owner’s share of the labor. It is added to the profit.</p></div></div>
-<div><div class="card"><h2>Current sale</h2><div id="cart"></div>
+<div><div class="card" id="csale"><h2>Current sale</h2><div id="cart"></div>
 <div id="tots" style="margin-top:10px"></div>
 <div class="row" style="margin-top:10px"><div><label>Cash received (₱)</label><input id="cash" type="number" min="0" step="any"></div>
 <button class="b fit" id="pay">Complete sale</button><button class="g fit" id="clr">Clear</button></div></div></div>
@@ -61,7 +63,7 @@ m.textContent=(t&&t.src?'Could not load '+t.src.split('/').pop().split('?')[0]:'
 
 <div id="scm" hidden><div class="box"><div class="row" style="margin-bottom:8px"><div><label>Camera (built-in or external)</label><select id="camsel"></select></div><button class="g fit" id="scx">Close</button></div>
 <video id="vid" playsinline muted></video><p class="mu" id="scmsg" style="margin:8px 0 0">Point the camera at a barcode.</p></div></div>
-<div id="login" style="position:fixed;inset:0;background:var(--bg);z-index:70;display:flex;align-items:center;justify-content:center;padding:14px"><div class="card" style="width:min(360px,100%)"><h2 id="lh">Sign in to Motoshop POS</h2><label>Email</label><input id="le" type="email" autocomplete="username"><label style="margin-top:8px">Password</label><input id="lpw" type="password" autocomplete="current-password"><div id="lpw2w" hidden><label style="margin-top:8px">Confirm password</label><input id="lpw2" type="password" autocomplete="new-password"><p class="mu" style="margin:10px 0 0;font-size:12px">When you tap Create account, you will first be asked to read and accept the Terms of Use and Privacy Policy.</p></div><p class="mu" id="lload">Checking your session…</p><p class="bad" id="lerr"></p><div class="row"><button class="b" id="lgo">Sign in</button></div><button type="button" class="g" id="lmode" style="width:100%;margin-top:10px;padding:11px">New shop? Create a free account</button><p class="mu" style="margin:10px 0 0;text-align:center;font-size:12px"><a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a> · <a href="terms.html" target="_blank" rel="noopener">Terms of Use</a></p><p class="mu" style="margin:6px 0 0;text-align:center;font-size:11px">Version 11</p></div></div>
+<div id="login" style="position:fixed;inset:0;background:var(--bg);z-index:70;display:flex;align-items:center;justify-content:center;padding:14px"><div class="card" style="width:min(360px,100%)"><h2 id="lh">Sign in to Motoshop POS</h2><label>Email</label><input id="le" type="email" autocomplete="username"><label style="margin-top:8px">Password</label><input id="lpw" type="password" autocomplete="current-password"><div id="lpw2w" hidden><label style="margin-top:8px">Confirm password</label><input id="lpw2" type="password" autocomplete="new-password"><p class="mu" style="margin:10px 0 0;font-size:12px">When you tap Create account, you will first be asked to read and accept the Terms of Use and Privacy Policy.</p></div><p class="mu" id="lload">Checking your session…</p><p class="bad" id="lerr"></p><div class="row"><button class="b" id="lgo">Sign in</button></div><button type="button" class="g" id="lmode" style="width:100%;margin-top:10px;padding:11px">New shop? Create a free account</button><p class="mu" style="margin:10px 0 0;text-align:center;font-size:12px"><a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a> · <a href="terms.html" target="_blank" rel="noopener">Terms of Use</a></p><p class="mu" style="margin:6px 0 0;text-align:center;font-size:11px">Version 12</p></div></div>
 <div id="setup" hidden style="position:fixed;inset:0;background:var(--bg);z-index:70;display:flex;align-items:center;justify-content:center;padding:14px"><div class="card" style="width:min(380px,100%)"><h2>Set up your shop</h2><p class="mu">Welcome! What is your shop called? You can add staff later.</p><label>Shop name</label><input id="sn" maxlength="80" placeholder="e.g. Dela Cruz Motorcycle Parts"><p class="bad" id="serr"></p><div class="row"><button class="b" id="sgo">Create my shop</button><button class="g" id="sout">Sign out</button></div><button type="button" class="x" id="sdel" style="margin-top:10px">Delete my account</button></div></div>
 <div id="pwm" hidden style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:65;display:flex;align-items:center;justify-content:center;padding:14px"><div class="card" style="width:min(380px,100%)"><h2>Account</h2><p class="mu" id="acct"></p><h3 style="margin:10px 0 0;font-size:14px">Change password</h3>
 <label>Current password</label><input id="pwc" type="password" autocomplete="current-password">
@@ -81,4 +83,4 @@ m.textContent=(t&&t.src?'Could not load '+t.src.split('/').pop().split('?')[0]:'
 <p class="bad" id="terr" style="margin:6px 0"></p><div class="row"><button class="b" id="tgo" disabled>Agree and continue</button><button class="g" id="tno">Decline</button></div></div></div>
 <div id="toast" hidden></div><div id="lbl"></div>
 
-<script defer src="app.js?v=11"></script></body></html>
+<script defer src="app.js?v=12"></script></body></html>

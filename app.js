@@ -26,7 +26,7 @@ async function load(uid){
  if(!m.data)return 'setup'; // signed up, but no shop created yet
  const sh=m.data.shops;role=m.data.role;db.shop=m.data.shop_id;db.shopName=sh.name;db.cut=+sh.default_cut;db.seq=+sh.seq;db.items=a.data;return true}
 // staff see only the Sell tab (the database enforces this too)
-function applyRole(){document.querySelectorAll('nav button').forEach(b=>b.hidden=b.dataset.t!=='pos'&&role!=='owner')}
+function applyRole(){document.body.classList.toggle('solo',role!=='owner');document.querySelectorAll('nav button').forEach(b=>b.hidden=b.dataset.t!=='pos'&&role!=='owner')}
 function showTab(t){document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));['pos','inv','rep','usr'].forEach(i=>$(i).hidden=i!==t);render()}
 function resetUI(){db.items=[];db.sales=[];role=null;cart={parts:[],labor:[]};['le','lpw','q','ld','la','lm','lp','cash','ue','up','fc','fn','fcost','fprice','fs','iq','pwc','pwn','pwn2','lpw2','sn','dlc','tagree'].forEach(i=>$(i).value='');$('fprev').innerHTML='';$('tagree').checked=false;try{sessionStorage.removeItem('moto-cache')}catch(e){}}
 function showLogin(msg){stopIdle();$('tm').hidden=true;$('setup').hidden=true;setMode(false);closePw();closeDel();resetUI();$('lload').hidden=true;$('pwb').hidden=true;$('lerr').textContent=msg||'';$('login').hidden=false;$('lout').hidden=true;applyRole();showTab('pos')}
