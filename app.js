@@ -78,7 +78,7 @@ $('lgo').onclick=async()=>{const email=$('le').value.trim(),pw=$('lpw').value,er
 async function doSignUp(email,pw){const err=t=>{$('lload').hidden=true;$('lerr').textContent=t};
  $('lgo').disabled=true;$('lload').hidden=false;$('lload').textContent='Creating your account…';
  const{data,error}=await sb.auth.signUp({email,password:pw,options:{emailRedirectTo:location.origin+location.pathname,data:{accepted_terms:TERMS_VERSION,accepted_at:new Date().toISOString()}}});$('lgo').disabled=false;
- if(error){err(error.message);return}
+ if(error){err(/database error|agree to the terms/i.test(error.message)?'Could not create your account. Press Ctrl+F5 to load the latest version of the app, then try again.':error.message);return}
  if(data.session){$('lpw').value=$('lpw2').value='';boot();return}
  setMode(false);$('lpw').value='';$('lload').hidden=false;$('lload').textContent='Almost done! Open the confirmation link we emailed you, then sign in here.'}
 // existing users (and staff added by an owner) must accept the current Terms once before using the app
