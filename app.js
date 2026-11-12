@@ -127,6 +127,15 @@ $('dly').onclick=async()=>{if($('dlc').value.trim()!=='DELETE'){$('dle').textCon
  $('dly').disabled=true;const r=await sb.rpc('delete_my_account',{p_confirm:'DELETE'});$('dly').disabled=false;
  if(r.error){$('dle').textContent=r.error.message;return}
  closeDel();await signOut('Your account has been deleted.')};
+/* ---------- install to the home screen (works in Chrome on Android) ---------- */
+let installEv=null;const isApp=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone;
+function showInstall(){const on=!!installEv&&!isApp();$('instl').hidden=!on;$('inst').hidden=!on;$('insth').hidden=isApp()||on}
+addEventListener('beforeinstallprompt',e=>{e.preventDefault();installEv=e;showInstall()});
+addEventListener('appinstalled',()=>{installEv=null;showInstall();toast('Installed! Open Motoshop from your home screen.')});
+const doInstall=async()=>{if(!installEv)return;installEv.prompt();await installEv.userChoice;installEv=null;showInstall()};
+$('instl').onclick=doInstall;$('inst').onclick=doInstall;
+if(isApp())$('insth').hidden=true;
+if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 const idleEv=['click','keydown','touchstart'];
 function idleReset(){clearTimeout(idleT);idleT=setTimeout(()=>signOut('Signed out after '+IDLE_MIN+' minutes of inactivity.'),IDLE_MIN*60000)}
 function startIdle(){stopIdle();idleEv.forEach(e=>addEventListener(e,idleReset,{passive:true}));idleReset()}
