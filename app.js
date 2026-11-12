@@ -29,9 +29,9 @@ async function load(uid){
 function applyRole(){document.body.classList.toggle('solo',role!=='owner');document.querySelectorAll('nav button').forEach(b=>b.hidden=b.dataset.t!=='pos'&&role!=='owner')}
 function showTab(t){document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));['pos','inv','rep','usr'].forEach(i=>$(i).hidden=i!==t);render()}
 function resetUI(){db.items=[];db.sales=[];role=null;cart={parts:[],labor:[]};['le','lpw','q','ld','la','lm','lp','cash','ue','up','fc','fn','fcost','fprice','fs','iq','pwc','pwn','pwn2','lpw2','sn','dlc','tagree'].forEach(i=>$(i).value='');$('fprev').innerHTML='';$('tagree').checked=false;try{sessionStorage.removeItem('moto-cache')}catch(e){}}
-function showLogin(msg){stopIdle();$('tm').hidden=true;$('setup').hidden=true;setMode(false);closePw();closeDel();resetUI();$('lload').hidden=true;$('pwb').hidden=true;$('lerr').textContent=msg||'';$('login').hidden=false;$('lout').hidden=true;applyRole();showTab('pos')}
+function showLogin(msg){stopIdle();$('tm').hidden=true;$('setup').hidden=true;setMode(false);closePw();closeDel();resetUI();$('lload').hidden=true;$('pwb').hidden=true;$('lerr').textContent=msg||'';$('login').hidden=false;$('lout').hidden=true;$('mb').hidden=true;closeMenu();applyRole();showTab('pos')}
 let curUid;
-function enter(){$('login').hidden=true;$('lout').hidden=false;$('pwb').hidden=false;applyRole();startIdle();showTab('pos')}
+function enter(){$('login').hidden=true;$('lout').hidden=false;$('pwb').hidden=false;$('mb').hidden=false;applyRole();startIdle();showTab('pos')}
 async function boot(){
  if(SUPABASE_URL.startsWith('YOUR')){$('lload').hidden=true;$('lerr').textContent='Add your Supabase URL and anon key at the top of app.js.';return}
  const{data:{session}}=await sb.auth.getSession();
@@ -136,6 +136,15 @@ const doInstall=async()=>{if(!installEv)return;installEv.prompt();await installE
 $('instl').onclick=doInstall;$('inst').onclick=doInstall;
 if(isApp())$('insth').hidden=true;
 if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+/* ---------- hamburger menu (account, policies, sign out) ---------- */
+function closeMenu(){$('menu').hidden=true;$('mb').setAttribute('aria-expanded','false')}
+async function openMenu(){const u=(await sb.auth.getSession()).data.session?.user;
+ $('mwho').textContent=u?u.email+(role==='owner'?' · owner':role==='staff'?' · staff':''):'';
+ $('menu').hidden=false;$('mb').setAttribute('aria-expanded','true')}
+$('mb').onclick=e=>{e.stopPropagation();$('menu').hidden?openMenu():closeMenu()};
+$('menu').onclick=()=>closeMenu(); // choosing any item closes the menu
+addEventListener('click',e=>{if(!$('menu').hidden&&!$('mb').contains(e.target)&&!$('menu').contains(e.target))closeMenu()});
+addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu()});
 const idleEv=['click','keydown','touchstart'];
 function idleReset(){clearTimeout(idleT);idleT=setTimeout(()=>signOut('Signed out after '+IDLE_MIN+' minutes of inactivity.'),IDLE_MIN*60000)}
 function startIdle(){stopIdle();idleEv.forEach(e=>addEventListener(e,idleReset,{passive:true}));idleReset()}
