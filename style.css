@@ -90,3 +90,8 @@ body.solo #toast{bottom:calc(90px + env(safe-area-inset-bottom,0px))}
 a{color:var(--lk);font-weight:600}
 #lbl{display:none}
 @media print{body>*:not(#lbl){display:none!important}#lbl{display:block;text-align:center;color:#000;background:#fff;font-family:Arial,sans-serif}}
+/* low-stock alert */
+.tag{display:inline-block;padding:2px 8px;border-radius:2px;font:800 13px var(--hf);letter-spacing:.8px;text-transform:uppercase}
+.tag.bad{background:var(--bad);color:var(--bg)}
+#lsl>div{border-left-color:var(--bad)}
+#lsm h2{color:var(--bad)}

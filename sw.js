@@ -1,7 +1,7 @@
 /* Motoshop POS service worker: makes the installed app open instantly and keeps the app files available offline.
    It NEVER caches database traffic (supabase.co): sales and stock always go to the live database. */
-const CACHE = 'motoshop-v14';
-const SHELL = ['./', 'index.html', 'style.css?v=14', 'app.js?v=14', 'manifest.webmanifest', 'icon-192.png', 'terms.html', 'privacy.html'];
+const CACHE = 'motoshop-v15';
+const SHELL = ['./', 'index.html', 'style.css?v=15', 'app.js?v=15', 'manifest.webmanifest', 'icon-192.png', 'terms.html', 'privacy.html'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => Promise.all(SHELL.map(u => c.add(u).catch(() => {})))).then(() => self.skipWaiting()));

@@ -28,7 +28,7 @@ async function load(uid){
 // staff see only the Sell tab (the database enforces this too)
 function applyRole(){document.body.classList.toggle('solo',role!=='owner');document.querySelectorAll('nav button').forEach(b=>b.hidden=b.dataset.t!=='pos'&&role!=='owner')}
 function showTab(t){document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));['pos','inv','rep','usr'].forEach(i=>$(i).hidden=i!==t);render()}
-function resetUI(){db.items=[];db.sales=[];role=null;cart={parts:[],labor:[]};['le','lpw','q','ld','la','lm','lp','cash','ue','up','fc','fn','fcost','fprice','fs','iq','pwc','pwn','pwn2','lpw2','sn','dlc','tagree'].forEach(i=>$(i).value='');$('fprev').innerHTML='';$('tagree').checked=false;try{sessionStorage.removeItem('moto-cache')}catch(e){}}
+function resetUI(){db.items=[];db.sales=[];role=null;cart={parts:[],labor:[]};['le','lpw','q','ld','la','lm','lp','cash','ue','up','fc','fn','fcost','fprice','fs','iq','pwc','pwn','pwn2','lpw2','sn','dlc','tagree'].forEach(i=>$(i).value='');$('fprev').innerHTML='';$('tagree').checked=false;try{sessionStorage.removeItem('moto-cache');sessionStorage.removeItem('moto-low')}catch(e){}lowSeen={};$('lsm').hidden=true;lowOnly=false}
 function showLogin(msg){stopIdle();$('tm').hidden=true;$('setup').hidden=true;setMode(false);closePw();closeDel();resetUI();$('lload').hidden=true;$('pwb').hidden=true;$('lerr').textContent=msg||'';$('login').hidden=false;$('lout').hidden=true;$('mb').hidden=true;closeMenu();applyRole();showTab('pos')}
 let curUid;
 function enter(){$('login').hidden=true;$('lout').hidden=false;$('pwb').hidden=false;$('mb').hidden=false;applyRole();startIdle();showTab('pos')}
@@ -45,7 +45,7 @@ async function boot(){
  const r=await load(curUid);
  if(r==='setup'){showSetup();return}
  if(!r){if(!c)showLogin('Could not load data. Please sign in again.');return}
- if(c){applyRole();role==='owner'?render():showTab('pos')}else enter()}
+ if(c){applyRole();role==='owner'?render():showTab('pos')}else enter();checkLow()}
 addEventListener('pagehide',()=>{if(role)try{sessionStorage.setItem('moto-cache',JSON.stringify({uid:curUid,role,shop:db.shop,shopName:db.shopName,items:db.items,cut:db.cut,seq:db.seq}))}catch(e){}});
 let signup=false;
 function setMode(on){signup=on;$('lh').textContent=on?'Create your free shop account':'Sign in to Motoshop POS';$('lpw2w').hidden=!on;$('lgo').textContent=on?'Create account':'Sign in';$('lmode').textContent=on?'Already have an account? Sign in':'New shop? Create a free account';$('lerr').textContent='';$('lpw').autocomplete=on?'new-password':'current-password';}
@@ -145,6 +145,31 @@ $('mb').onclick=e=>{e.stopPropagation();$('menu').hidden?openMenu():closeMenu()}
 $('menu').onclick=()=>closeMenu(); // choosing any item closes the menu
 addEventListener('click',e=>{if(!$('menu').hidden&&!$('mb').contains(e.target)&&!$('menu').contains(e.target))closeMenu()});
 addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu()});
+/* ---------- low-stock pop-up ---------- */
+// An item is "low" when stock is at or below its alert level (set per item). Each item is announced once per drop:
+// again only if its stock falls further, or after it has been restocked above the alert level.
+let lowSeen={},lowOnly=false,lastSync=0;try{lowSeen=JSON.parse(sessionStorage.getItem('moto-low')||'{}')}catch(e){}
+function closeLow(){$('lsm').hidden=true}
+function checkLow(){
+ if(!role||!$('login').hidden||!$('lsm').hidden)return;
+ const show=[];
+ db.items.forEach(i=>{if(i.stock<=i.low){if(lowSeen[i.id]===undefined||i.stock<lowSeen[i.id])show.push(i)}else delete lowSeen[i.id]});
+ show.forEach(i=>lowSeen[i.id]=i.stock);
+ try{sessionStorage.setItem('moto-low',JSON.stringify(lowSeen))}catch(e){}
+ if(!show.length)return;
+ show.sort((a,b)=>a.stock-b.stock||a.name.localeCompare(b.name));
+ const out=show.filter(i=>i.stock<=0).length;
+ $('lss').textContent=show.length+(show.length===1?' item is':' items are')+' at or below the alert level'+(out?' ('+out+' out of stock).':'.');
+ $('lsl').innerHTML=show.map(i=>`<div><div><b>${esc(i.name)}</b><div class="mu">${esc(i.code)}</div></div><div class="r">${i.stock<=0?'<span class="tag bad">Out of stock</span>':'<b>'+i.stock+' left</b>'}<div class="mu">alert at ${i.low}</div></div></div>`).join('');
+ $('lsv').hidden=role!=='owner';$('lsm').hidden=false;$('lsok').focus()}
+$('lsok').onclick=closeLow;
+$('lsv').onclick=()=>{closeLow();lowOnly=true;showTab('inv')};
+$('lowf').onclick=()=>{lowOnly=!lowOnly;renderInv()};
+addEventListener('keydown',e=>{if(e.key==='Escape')closeLow()});
+// when the app comes back to the screen, refresh stock (other cashiers may have sold items) and re-check
+if(document.addEventListener)document.addEventListener('visibilitychange',async()=>{
+ if(document.visibilityState!=='visible'||!role||!$('login').hidden||Date.now()-lastSync<30000)return;
+ lastSync=Date.now();const f=await sb.from('items').select('*');if(f.data){db.items=f.data;render();checkLow()}});
 const idleEv=['click','keydown','touchstart'];
 function idleReset(){clearTimeout(idleT);idleT=setTimeout(()=>signOut('Signed out after '+IDLE_MIN+' minutes of inactivity.'),IDLE_MIN*60000)}
 function startIdle(){stopIdle();idleEv.forEach(e=>addEventListener(e,idleReset,{passive:true}));idleReset()}
@@ -216,7 +241,7 @@ $('pay').onclick=async()=>{const c=cartView();if(!c.parts.length&&!c.labor.lengt
  $('pay').disabled=false;
  if(r.error){toast(r.error.message);const f=await sb.from('items').select('*');if(f.data)db.items=f.data;render();return}
  c.parts.forEach(p=>{db.items.find(i=>i.id===p.id).stock-=p.qty});
- cart={parts:[],labor:[]};$('cash').value='';render();toast('Sale saved. Change: '+peso(cash-t.total))};
+ cart={parts:[],labor:[]};$('cash').value='';render();toast('Sale saved. Change: '+peso(cash-t.total));checkLow()};
 
 /* ---------- inventory ---------- */
 function genCode(){let c;do{db.seq++;c='MC'+String(db.seq).padStart(6,'0')}while(find(c));return c}
@@ -234,8 +259,10 @@ $('fsave').onclick=()=>{const code=$('fc').value.trim(),name=$('fn').value.trim(
  dbItem(id?db.items.find(i=>i.id===id):db.items[db.items.length-1]);dbSet();resetForm();render();toast('Item saved')};
 function edit(id){const i=db.items.find(x=>x.id===id);$('fid').value=i.id;$('fc').value=i.code;$('fn').value=i.name;$('fcost').value=i.cost;$('fprice').value=i.price;$('fs').value=i.stock;$('fl').value=i.low;$('fh').textContent='Edit item';bc($('fprev'),i.code);scrollTo(0,0)}
 $('iq').oninput=renderInv;
-function renderInv(){if($('inv').hidden)return;const v=$('iq').value.trim().toLowerCase(),m=db.items.filter(i=>!v||i.name.toLowerCase().includes(v)||i.code.toLowerCase().includes(v));
- $('itbl').innerHTML=m.length?`<table><tr><th>Item</th><th>Cost</th><th>Price</th><th>Stock</th><th></th></tr>${m.map(i=>`<tr><td><b>${esc(i.name)}</b><div class="mu">${esc(i.code)}</div></td><td>${peso(i.cost)}</td><td>${peso(i.price)}</td><td class="${i.stock<=i.low?'bad':''}">${i.stock}${i.stock<=i.low?'<div class="mu bad">low</div>':''}</td><td style="white-space:nowrap"><button class="g" data-e="${i.id}">Edit</button> <button class="g" data-s="${i.id}">+Stock</button> <button class="g" data-b="${i.id}">Label</button> <button class="x" data-d="${i.id}">Delete</button></td></tr>`).join('')}</table>`:'<p class="mu">No items yet. Scan a barcode or fill the form to add one.</p>';
+function renderInv(){if($('inv').hidden)return;const nLow=db.items.filter(i=>i.stock<=i.low).length;
+ $('lowf').textContent='Low stock ('+nLow+')';$('lowf').setAttribute('aria-pressed',String(lowOnly));$('lowf').className=lowOnly?'b fit':'g fit';
+ const v=$('iq').value.trim().toLowerCase(),m=db.items.filter(i=>(!lowOnly||i.stock<=i.low)&&(!v||i.name.toLowerCase().includes(v)||i.code.toLowerCase().includes(v)));
+ $('itbl').innerHTML=m.length?`<table><tr><th>Item</th><th>Cost</th><th>Price</th><th>Stock</th><th></th></tr>${m.map(i=>`<tr><td><b>${esc(i.name)}</b><div class="mu">${esc(i.code)}</div></td><td>${peso(i.cost)}</td><td>${peso(i.price)}</td><td class="${i.stock<=i.low?'bad':''}">${i.stock}${i.stock<=i.low?'<div class="mu bad">low</div>':''}</td><td style="white-space:nowrap"><button class="g" data-e="${i.id}">Edit</button> <button class="g" data-s="${i.id}">+Stock</button> <button class="g" data-b="${i.id}">Label</button> <button class="x" data-d="${i.id}">Delete</button></td></tr>`).join('')}</table>`:'<p class="mu">'+(lowOnly?'Nothing is low on stock.':'No items yet. Scan a barcode or fill the form to add one.')+'</p>';
  const q=(a,f)=>$('itbl').querySelectorAll(`[data-${a}]`).forEach(b=>b.onclick=()=>f(b.dataset[a]));
  q('e',edit);
  q('s',id=>{const n=parseInt(prompt('Add how many units?'));if(n>0){db.items.find(i=>i.id===id).stock+=n;dbItem(db.items.find(i=>i.id===id));render()}});
