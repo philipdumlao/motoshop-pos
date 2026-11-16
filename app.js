@@ -24,14 +24,14 @@ async function load(uid){
  const[m,a]=await Promise.all([sb.from('shop_members').select('role,shop_id,shops(name,default_cut,seq)').eq('user_id',uid).maybeSingle(),sb.from('items').select('*')]);
  if(m.error||a.error){toast('Load failed: '+(m.error||a.error).message);return false}
  if(!m.data)return 'setup'; // signed up, but no shop created yet
- const sh=m.data.shops;role=m.data.role;db.shop=m.data.shop_id;db.shopName=sh.name;db.cut=+sh.default_cut;db.seq=+sh.seq;db.items=a.data;return true}
+ const sh=m.data.shops;if(!sh)return false;role=m.data.role;db.shop=m.data.shop_id;db.shopName=sh.name;db.cut=+sh.default_cut;db.seq=+sh.seq;db.items=a.data;return true}
 // staff see only the Sell tab (the database enforces this too)
 function applyRole(){document.body.classList.toggle('solo',role!=='owner');document.querySelectorAll('nav button').forEach(b=>b.hidden=b.dataset.t!=='pos'&&role!=='owner')}
 function showTab(t){document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));['pos','inv','rep','usr'].forEach(i=>$(i).hidden=i!==t);render()}
 function resetUI(){db.items=[];db.sales=[];role=null;cart={parts:[],labor:[]};['le','lpw','q','ld','la','lm','lp','cash','ue','up','fc','fn','fcost','fprice','fs','iq','pwc','pwn','pwn2','lpw2','sn','dlc','tagree'].forEach(i=>$(i).value='');$('fprev').innerHTML='';$('tagree').checked=false;try{sessionStorage.removeItem('moto-cache');sessionStorage.removeItem('moto-low')}catch(e){}lowSeen={};$('lsm').hidden=true;lowOnly=false}
-function showLogin(msg){stopIdle();$('tm').hidden=true;$('setup').hidden=true;setMode(false);closePw();closeDel();resetUI();$('lload').hidden=true;$('pwb').hidden=true;$('lerr').textContent=msg||'';$('login').hidden=false;$('lout').hidden=true;$('mb').hidden=true;closeMenu();applyRole();showTab('pos')}
+function showLogin(msg){stopIdle();stopBeat();$('bm').hidden=true;$('tm').hidden=true;$('setup').hidden=true;setMode(false);closePw();closeDel();resetUI();$('lload').hidden=true;$('pwb').hidden=true;$('lerr').textContent=msg||'';$('login').hidden=false;$('lout').hidden=true;$('mb').hidden=true;closeMenu();applyRole();showTab('pos')}
 let curUid;
-function enter(){$('login').hidden=true;$('lout').hidden=false;$('pwb').hidden=false;$('mb').hidden=false;applyRole();startIdle();showTab('pos')}
+function enter(){$('login').hidden=true;$('lout').hidden=false;$('pwb').hidden=false;$('mb').hidden=false;applyRole();startIdle();startBeat();showTab('pos')}
 async function boot(){
  if(SUPABASE_URL.startsWith('YOUR')){$('lload').hidden=true;$('lerr').textContent='Add your Supabase URL and anon key at the top of app.js.';return}
  const{data:{session}}=await sb.auth.getSession();
@@ -39,6 +39,9 @@ async function boot(){
  curUid=session.user.id;
  // everyone must have accepted the CURRENT Terms and Privacy Policy before using the app
  if((session.user.user_metadata||{}).accepted_terms!==TERMS_VERSION){showTerms();return}
+ const cl=await sb.rpc('claim_session',{p_takeover:false});
+ if(cl.error){showLogin('Could not verify your session: '+cl.error.message);return}
+ if(cl.data&&cl.data.status==='busy'){showBusy(cl.data.last_seen);return}
  // show the last known data at once, then refresh it in the background
  let c=null;try{c=JSON.parse(sessionStorage.getItem('moto-cache'))}catch(e){}
  if(c&&c.uid===curUid){role=c.role;db.shop=c.shop;db.shopName=c.shopName;db.items=c.items;db.cut=c.cut;db.seq=c.seq;enter()}else c=null;
@@ -94,7 +97,8 @@ $('sgo').onclick=async()=>{const n=$('sn').value.trim();if(!n){$('serr').textCon
  $('setup').hidden=true;$('login').hidden=false;$('lload').hidden=false;$('lload').textContent='Opening your shop…';boot()};
 $('sout').onclick=()=>signOut();
 $('lpw').onkeydown=e=>{if(e.key==='Enter')$('lgo').click()};
-async function signOut(msg){await sb.auth.signOut({scope:'local'});showLogin(msg)}
+async function signOut(msg){try{await Promise.race([sb.rpc('release_session'),new Promise(r=>setTimeout(r,3000))])}catch(e){}
+ await sb.auth.signOut({scope:'local'});showLogin(msg)}
 $('lout').onclick=()=>signOut();
 /* ---------- change own password ---------- */
 function closePw(){$('pwm').hidden=true;$('pwe').textContent='';['pwc','pwn','pwn2'].forEach(i=>$(i).value='')}
@@ -170,6 +174,20 @@ addEventListener('keydown',e=>{if(e.key==='Escape')closeLow()});
 if(document.addEventListener)document.addEventListener('visibilitychange',async()=>{
  if(document.visibilityState!=='visible'||!role||!$('login').hidden||Date.now()-lastSync<30000)return;
  lastSync=Date.now();const f=await sb.from('items').select('*');if(f.data){db.items=f.data;render();checkLow()}});
+/* ---------- one active sign-in per account ---------- */
+let beatT;
+const ago=ts=>{const m=Math.max(0,Math.round((Date.now()-new Date(ts))/60000));return m<1?'a few seconds ago':m<60?m+(m===1?' minute':' minutes')+' ago':Math.round(m/60)+' hours ago'};
+function showBusy(ts){stopIdle();$('lload').hidden=true;$('bmt').textContent='This account is already signed in on another device (last active '+ago(ts)+').';$('bm').hidden=false;$('bmy').focus()}
+$('bmy').onclick=async()=>{$('bmy').disabled=true;const r=await sb.rpc('claim_session',{p_takeover:true});$('bmy').disabled=false;
+ if(r.error){$('bmt').textContent='Could not sign out the other device: '+r.error.message;return}
+ $('bm').hidden=true;$('login').hidden=false;$('lload').hidden=false;$('lload').textContent='Loading…';boot()};
+$('bmn').onclick=()=>{$('bm').hidden=true;signOut()};
+// every 30 seconds, and whenever the app returns to the screen, check we still hold the account
+async function checkSession(){if(!role||!$('login').hidden)return;const r=await sb.rpc('touch_session');
+ if(!r.error&&r.data===false)signOut('You were signed out because this account was opened on another device.')}
+function startBeat(){stopBeat();beatT=setInterval(checkSession,30000)}
+function stopBeat(){clearInterval(beatT)}
+if(document.addEventListener)document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkSession()});
 const idleEv=['click','keydown','touchstart'];
 function idleReset(){clearTimeout(idleT);idleT=setTimeout(()=>signOut('Signed out after '+IDLE_MIN+' minutes of inactivity.'),IDLE_MIN*60000)}
 function startIdle(){stopIdle();idleEv.forEach(e=>addEventListener(e,idleReset,{passive:true}));idleReset()}
@@ -180,12 +198,19 @@ function bc(el,code,h){el.innerHTML='';if(!code)return;if(!window.JsBarcode){loa
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>showTab(b.dataset.t));
 
 /* ---------- camera scanner ---------- */
-let stream,timer,reader,det,onCode,keep,last='',lt=0;
+let stream,timer,reader,det,onCode,keep,last='',lt=0,seen=0,scTimer;
 const loadZX=()=>window.ZXing?Promise.resolve():new Promise((ok,no)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';s.onload=ok;s.onerror=no;document.head.appendChild(s)});
-function beep(){try{const a=new (window.AudioContext||window.webkitAudioContext)(),o=a.createOscillator();o.frequency.value=900;o.connect(a.destination);o.start();setTimeout(()=>{o.stop();a.close()},110)}catch(e){}}
+function beep(bad){try{const a=new (window.AudioContext||window.webkitAudioContext)(),ring=(f,t,d)=>{const o=a.createOscillator();o.frequency.value=f;o.connect(a.destination);o.start(a.currentTime+t);o.stop(a.currentTime+t+d)};if(bad){ring(300,0,.12);ring(300,.18,.12)}else ring(900,0,.11);setTimeout(()=>a.close(),700)}catch(e){}
+ try{navigator.vibrate&&navigator.vibrate(bad?[80,60,80]:60)}catch(e){}}
 function stopCam(){clearInterval(timer);if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}if(reader){try{reader.reset()}catch(e){}reader=null}}
 function closeScan(){stopCam();$('scm').hidden=true}
-function hit(c){const n=Date.now();if(c===last&&n-lt<2000)return;last=c;lt=n;beep();onCode(c);if(!keep)closeScan()}
+function hit(c){const n=Date.now();
+ // the same barcode still in front of the camera is NOT a new scan: it has to leave the view for a moment first
+ if(c===last&&n-seen<1500){seen=n;return}
+ seen=n;last=c;const res=onCode(c)||{ok:true};beep(res.ok===false);feedback(res);if(!keep&&res.ok!==false)closeScan()}
+function feedback(res){const m=$('scmsg'),bx=$('scb'),bad=res.ok===false;
+ m.className='scs '+(bad?'err':'ok');bx.className='box '+(bad?'err':'ok');m.textContent=(bad?'✕ ':'✓ ')+(res.text||'Scanned');
+ clearTimeout(scTimer);scTimer=setTimeout(()=>{m.className='scs';bx.className='box';m.textContent='Ready: point the camera at the next barcode.'},bad?3500:2200)}
 async function startCam(id){stopCam();$('scmsg').textContent='Point the camera at a barcode.';
 try{
  if('BarcodeDetector' in window){det=det||new BarcodeDetector();
@@ -197,7 +222,7 @@ try{
  sel.innerHTML=devs.map((d,i)=>`<option value="${esc(d.deviceId)}">${esc(d.label||'Camera '+(i+1))}</option>`).join('');
  if(cur&&devs.some(d=>d.deviceId===cur))sel.value=cur;
 }catch(e){$('scmsg').textContent='Camera unavailable. Allow camera access, or type the barcode instead. ('+(e.name||'error')+')'}}
-function scan(cb,k){onCode=cb;keep=k;$('scm').hidden=false;startCam()}
+function scan(cb,k){onCode=cb;keep=k;last='';seen=0;$('scsum').textContent='';$('scmsg').className='scs';$('scb').className='box';$('scm').hidden=false;startCam()}
 $('camsel').onchange=e=>startCam(e.target.value);$('scx').onclick=closeScan;
 
 /* ---------- sell ---------- */
@@ -208,7 +233,13 @@ function addPart(id){const it=db.items.find(i=>i.id===id);if(!it)return;const l=
 function byCode(c){const it=find(c.trim());if(it){addPart(it.id);$('q').value='';return true}return false}
 $('q').oninput=renderPos;
 $('q').onkeydown=e=>{if(e.key!=='Enter')return;const v=$('q').value.trim();if(!v)return;if(byCode(v))return;const m=db.items.filter(i=>i.name.toLowerCase().includes(v.toLowerCase()));if(m.length===1){addPart(m[0].id);$('q').value=''}else toast(m.length?'Pick an item from the list':'No item found')};
-$('posScan').onclick=()=>scan(c=>{if(!byCode(c))toast('Barcode '+c+' is not in inventory')},true);
+$('posScan').onclick=()=>scan(c=>{const it=find(c.trim());
+ if(!it)return{ok:false,text:'Not in inventory: '+c};
+ const l=cart.parts.find(p=>p.id===it.id);
+ if((l?l.qty:0)+1>it.stock)return{ok:false,text:it.name+': only '+it.stock+' in stock'};
+ addPart(it.id);const q=cart.parts.find(p=>p.id===it.id).qty,t=calc(cartView());
+ $('scsum').textContent='In this sale: '+cart.parts.length+(cart.parts.length===1?' item':' items')+' · '+peso(t.total);
+ return{ok:true,text:it.name+' added (×'+q+'). Next item please'}},true);
 $('addL').onclick=()=>{const a=parseFloat($('la').value);if(!(a>0)){toast('Enter the labor amount');return}
  let p=parseFloat($('lp').value);if(isNaN(p))p=db.cut;
  cart.labor.push({desc:$('ld').value.trim()||'Labor',amt:a,mech:$('lm').value.trim()||'Mechanic',pct:Math.min(100,Math.max(0,p))});
@@ -239,7 +270,7 @@ $('pay').onclick=async()=>{const c=cartView();if(!c.parts.length&&!c.labor.lengt
  // the database recomputes prices, stock and profit, so they cannot be tampered with
  const r=await sb.rpc('complete_sale',{p_parts:c.parts.map(p=>({id:p.id,qty:p.qty})),p_labor:c.labor,p_cash:cash});
  $('pay').disabled=false;
- if(r.error){toast(r.error.message);const f=await sb.from('items').select('*');if(f.data)db.items=f.data;render();return}
+ if(r.error){if(/another device/i.test(r.error.message)){signOut('You were signed out because this account was opened on another device.');return}toast(r.error.message);const f=await sb.from('items').select('*');if(f.data)db.items=f.data;render();return}
  c.parts.forEach(p=>{db.items.find(i=>i.id===p.id).stock-=p.qty});
  cart={parts:[],labor:[]};$('cash').value='';render();toast('Sale saved. Change: '+peso(cash-t.total));checkLow()};
 

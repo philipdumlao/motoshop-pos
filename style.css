@@ -95,3 +95,7 @@ a{color:var(--lk);font-weight:600}
 .tag.bad{background:var(--bad);color:var(--bg)}
 #lsl>div{border-left-color:var(--bad)}
 #lsm h2{color:var(--bad)}
+/* scanner feedback */
+.scs{margin-top:10px;padding:12px;border-radius:4px;font:700 20px/1.2 var(--hf);letter-spacing:.5px;text-transform:uppercase;background:var(--sf2);color:var(--tx)}
+.scs.ok{background:#1B7A32;color:#fff}.scs.err{background:var(--bad);color:var(--bg)}
+#scm .box.ok{border-left-color:#1B7A32}#scm .box.err{border-left-color:var(--bad)}
