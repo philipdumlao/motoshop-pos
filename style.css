@@ -99,3 +99,27 @@ a{color:var(--lk);font-weight:600}
 .scs{margin-top:10px;padding:12px;border-radius:4px;font:700 20px/1.2 var(--hf);letter-spacing:.5px;text-transform:uppercase;background:var(--sf2);color:var(--tx)}
 .scs.ok{background:#1B7A32;color:#fff}.scs.err{background:var(--bad);color:var(--bg)}
 #scm .box.ok{border-left-color:#1B7A32}#scm .box.err{border-left-color:var(--bad)}
+/* ---------- phones: everything fits the screen, tables become cards ---------- */
+html{-webkit-text-size-adjust:100%}
+img,video,svg{max-width:100%}
+#pwm>.card,#dlm>.card,#bm>.card,#login>.card,#setup>.card{max-height:calc(100vh - 28px);max-height:calc(100dvh - 28px);overflow:auto}
+@media(max-width:700px){
+ .sc{overflow:visible}
+ .sc table,.sc tbody,.sc tr,.sc td{display:block;width:100%}
+ .sc tr:first-child{display:none}
+ .sc tr{background:var(--sf2);border-left:5px solid var(--ac);border-radius:2px;margin-bottom:10px;padding:10px 12px}
+ .sc td{border:0;padding:3px 0;display:flex;justify-content:space-between;align-items:baseline;gap:12px;text-align:right}
+ .sc td::before{content:attr(data-l);flex:0 0 auto;font:600 12px Barlow,system-ui,sans-serif;letter-spacing:.9px;text-transform:uppercase;color:var(--mu);text-align:left}
+ .sc td[data-l=""]::before{display:none}
+ .sc td:first-child{display:block;text-align:left;font-size:17px;padding-bottom:6px;word-break:break-word}
+ .sc td.det{display:block;text-align:left}
+ .sc td.det::before{display:block;margin-bottom:2px}
+ .sc td.acts{display:flex;flex-wrap:wrap;justify-content:flex-start;gap:8px;padding-top:8px}
+}
+@media(max-width:420px){
+ main{padding-left:10px;padding-right:10px}
+ .card{padding:12px}
+ header h1{font-size:22px}
+ .tot.big{font-size:36px}
+ .stat b{font-size:28px}
+}
