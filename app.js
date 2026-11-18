@@ -73,15 +73,22 @@ $('lgo').onclick=async()=>{const email=$('le').value.trim(),pw=$('lpw').value,er
  $('lerr').textContent='';
  if(signup){
   if(!email){err('Enter your email.');return}if(pw.length<8){err('Password must be at least 8 characters.');return}if(pw!==$('lpw2').value){err('The passwords do not match.');return}
+  // an email that already has an account can never be used again: refuse before anything else happens
+  $('lgo').disabled=true;$('lload').hidden=false;$('lload').textContent='Checking your email…';
+  const used=await sb.rpc('email_in_use',{p_email:email});$('lgo').disabled=false;$('lload').hidden=true;
+  if(used.data===true){emailTaken();return}
   // the Terms pop up first: nothing is created and no email is sent unless the person agrees
   askTerms(()=>doSignUp(email,pw),()=>err('Account not created. You must read and agree to the Terms of Use and Privacy Policy to create an account.'));return}
  $('lgo').disabled=true;$('lload').hidden=false;$('lload').textContent='Signing in…';
  const{error}=await sb.auth.signInWithPassword({email,password:pw});$('lgo').disabled=false;
  if(error)err(error.message);else{$('lpw').value='';$('lload').textContent='Loading shop data…';boot()}};
+function emailTaken(){const e=$('le').value;setMode(false);$('lpw').value='';$('lpw2').value='';$('le').value=e;$('lload').hidden=true;
+ $('lerr').textContent='This email already has an account, so it can’t be used again. Sign in below, or tap “New shop?” and use a different email.'}
 async function doSignUp(email,pw){const err=t=>{$('lload').hidden=true;$('lerr').textContent=t};
  $('lgo').disabled=true;$('lload').hidden=false;$('lload').textContent='Creating your account…';
  const{data,error}=await sb.auth.signUp({email,password:pw,options:{emailRedirectTo:location.origin+location.pathname,data:{accepted_terms:TERMS_VERSION,accepted_at:new Date().toISOString()}}});$('lgo').disabled=false;
  if(error){err(/database error|agree to the terms/i.test(error.message)?'Could not create your account. Press Ctrl+F5 to load the latest version of the app, then try again.':error.message);return}
+ if(data&&data.user&&Array.isArray(data.user.identities)&&data.user.identities.length===0){emailTaken();return} // safety net: the server says this email already exists
  if(data.session){$('lpw').value=$('lpw2').value='';boot();return}
  setMode(false);$('lpw').value='';$('lload').hidden=false;$('lload').textContent='Almost done! Open the confirmation link we emailed you, then sign in here.'}
 // existing users (and staff added by an owner) must accept the current Terms once before using the app
@@ -332,7 +339,7 @@ async function renderUsr(){if($('usr').hidden)return;
  $('utbl').querySelectorAll('[data-pw]').forEach(b=>b.onclick=async()=>{const p=prompt('New password (at least 8 characters)');if(!p)return;try{await adminCall({action:'password',id:b.dataset.pw,password:p});toast('Password changed')}catch(e){toast(e.message)}});
  $('utbl').querySelectorAll('[data-rm]').forEach(b=>b.onclick=async()=>{if(!confirm('Remove this user? They will no longer be able to sign in.'))return;try{await adminCall({action:'delete',id:b.dataset.rm});renderUsr()}catch(e){toast(e.message)}})}
 $('uadd').onclick=async()=>{const email=$('ue').value.trim(),password=$('up').value;if(!email||!password){toast('Enter an email and a password');return}
- try{await adminCall({action:'create',email,password});$('ue').value=$('up').value='';toast('User added. They can only use the Sell tab.');renderUsr()}catch(e){toast(e.message)}};
+ try{await adminCall({action:'create',email,password});$('ue').value=$('up').value='';toast('User added. They can only use the Sell tab.');renderUsr()}catch(e){toast(/already|registered|exists/i.test(e.message)?'That email already has an account, so it can’t be added as staff.':e.message)}};
 
 function render(){$('lp').placeholder=db.cut;$('shopn').textContent=db.shopName?'· '+db.shopName:'';renderPos();renderInv();renderRep();renderUsr()}
 render();boot();
