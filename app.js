@@ -28,7 +28,7 @@ async function load(uid){
 // staff see only the Sell tab (the database enforces this too)
 function applyRole(){document.body.classList.toggle('solo',role!=='owner');document.querySelectorAll('nav button').forEach(b=>b.hidden=b.dataset.t!=='pos'&&role!=='owner')}
 function showTab(t){document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));['pos','inv','rep','usr'].forEach(i=>$(i).hidden=i!==t);render()}
-function resetUI(){db.items=[];db.sales=[];role=null;cart={parts:[],labor:[]};['le','lpw','q','ld','la','lm','lp','cash','ue','up','fc','fn','fcost','fprice','fs','iq','pwc','pwn','pwn2','lpw2','sn','dlc','tagree'].forEach(i=>$(i).value='');$('fprev').innerHTML='';$('tagree').checked=false;try{sessionStorage.removeItem('moto-cache');sessionStorage.removeItem('moto-low')}catch(e){}lowSeen={};$('lsm').hidden=true;lowOnly=false}
+function resetUI(){db.items=[];db.sales=[];role=null;cart={parts:[],labor:[]};['le','lpw','q','ld','la','lm','lp','cash','ue','up','fc','fn','fcost','fprice','fs','iq','pwc','pwn','pwn2','lpw2','sn','dlc','tagree','lfn','lmn','lln','lsx','sfn','smn','sln','ssx'].forEach(i=>$(i).value='');$('fprev').innerHTML='';$('tagree').checked=false;try{sessionStorage.removeItem('moto-cache');sessionStorage.removeItem('moto-low')}catch(e){}lowSeen={};$('lsm').hidden=true;lowOnly=false}
 function showLogin(msg){stopIdle();stopBeat();$('bm').hidden=true;$('tm').hidden=true;$('setup').hidden=true;setMode(false);closePw();closeDel();resetUI();$('lload').hidden=true;$('pwb').hidden=true;$('lerr').textContent=msg||'';$('login').hidden=false;$('lout').hidden=true;$('mb').hidden=true;closeMenu();applyRole();showTab('pos')}
 let curUid;
 function enter(){$('login').hidden=true;$('lout').hidden=false;$('pwb').hidden=false;$('mb').hidden=false;applyRole();startIdle();startBeat();showTab('pos')}
@@ -51,7 +51,7 @@ async function boot(){
  if(c){applyRole();role==='owner'?render():showTab('pos')}else enter();checkLow()}
 addEventListener('pagehide',()=>{if(role)try{sessionStorage.setItem('moto-cache',JSON.stringify({uid:curUid,role,shop:db.shop,shopName:db.shopName,items:db.items,cut:db.cut,seq:db.seq}))}catch(e){}});
 let signup=false;
-function setMode(on){signup=on;$('lh').textContent=on?'Create your free shop account':'Sign in to Motoshop POS';$('lpw2w').hidden=!on;$('lgo').textContent=on?'Create account':'Sign in';$('lmode').textContent=on?'Already have an account? Sign in':'New shop? Create a free account';$('lerr').textContent='';$('lpw').autocomplete=on?'new-password':'current-password';}
+function setMode(on){signup=on;$('lnames').hidden=!on;$('lh').textContent=on?'Create your free shop account':'Sign in to Motoshop POS';$('lpw2w').hidden=!on;$('lgo').textContent=on?'Create account':'Sign in';$('lmode').textContent=on?'Already have an account? Sign in':'New shop? Create a free account';$('lerr').textContent='';$('lpw').autocomplete=on?'new-password':'current-password';}
 $('lmode').onclick=()=>setMode(!signup);
 /* ---------- Terms pop-up: must be read and accepted BEFORE an account is created or used ---------- */
 let tmDocs={1:false,2:false},tmCur=1,tmYes=null,tmNo=null;
@@ -72,21 +72,22 @@ $('tno').onclick=()=>{$('tm').hidden=true;const f=tmNo;tmYes=tmNo=null;if(f)f()}
 $('lgo').onclick=async()=>{const email=$('le').value.trim(),pw=$('lpw').value,err=t=>{$('lload').hidden=true;$('lerr').textContent=t};
  $('lerr').textContent='';
  if(signup){
+  const nm=getNames('lfn','lmn','lln','lsx','your');if(nm.error){err(nm.error);return}
   if(!email){err('Enter your email.');return}if(pw.length<8){err('Password must be at least 8 characters.');return}if(pw!==$('lpw2').value){err('The passwords do not match.');return}
   // an email that already has an account can never be used again: refuse before anything else happens
   $('lgo').disabled=true;$('lload').hidden=false;$('lload').textContent='Checking your email…';
   const used=await sb.rpc('email_in_use',{p_email:email});$('lgo').disabled=false;$('lload').hidden=true;
   if(used.data===true){emailTaken();return}
   // the Terms pop up first: nothing is created and no email is sent unless the person agrees
-  askTerms(()=>doSignUp(email,pw),()=>err('Account not created. You must read and agree to the Terms of Use and Privacy Policy to create an account.'));return}
+  askTerms(()=>doSignUp(email,pw,nm),()=>err('Account not created. You must read and agree to the Terms of Use and Privacy Policy to create an account.'));return}
  $('lgo').disabled=true;$('lload').hidden=false;$('lload').textContent='Signing in…';
  const{error}=await sb.auth.signInWithPassword({email,password:pw});$('lgo').disabled=false;
  if(error)err(error.message);else{$('lpw').value='';$('lload').textContent='Loading shop data…';boot()}};
 function emailTaken(){const e=$('le').value;setMode(false);$('lpw').value='';$('lpw2').value='';$('le').value=e;$('lload').hidden=true;
  $('lerr').textContent='This email already has an account, so it can’t be used again. Sign in below, or tap “New shop?” and use a different email.'}
-async function doSignUp(email,pw){const err=t=>{$('lload').hidden=true;$('lerr').textContent=t};
+async function doSignUp(email,pw,nm){const err=t=>{$('lload').hidden=true;$('lerr').textContent=t};
  $('lgo').disabled=true;$('lload').hidden=false;$('lload').textContent='Creating your account…';
- const{data,error}=await sb.auth.signUp({email,password:pw,options:{emailRedirectTo:location.origin+location.pathname,data:{accepted_terms:TERMS_VERSION,accepted_at:new Date().toISOString()}}});$('lgo').disabled=false;
+ const{data,error}=await sb.auth.signUp({email,password:pw,options:{emailRedirectTo:location.origin+location.pathname,data:{accepted_terms:TERMS_VERSION,accepted_at:new Date().toISOString(),...nm}}});$('lgo').disabled=false;
  if(error){err(/database error|agree to the terms/i.test(error.message)?'Could not create your account. Press Ctrl+F5 to load the latest version of the app, then try again.':error.message);return}
  if(data&&data.user&&Array.isArray(data.user.identities)&&data.user.identities.length===0){emailTaken();return} // safety net: the server says this email already exists
  if(data.session){$('lpw').value=$('lpw2').value='';boot();return}
@@ -150,7 +151,7 @@ if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWor
 /* ---------- hamburger menu (account, policies, sign out) ---------- */
 function closeMenu(){$('menu').hidden=true;$('mb').setAttribute('aria-expanded','false')}
 async function openMenu(){const u=(await sb.auth.getSession()).data.session?.user;
- $('mwho').textContent=u?u.email+(role==='owner'?' · owner':role==='staff'?' · staff':''):'';
+ {const nm=u?fullName(u.user_metadata||{}):'';$('mwho').innerHTML=u?(nm?'<b>'+esc(nm)+'</b><br>':'')+esc(u.email)+(role==='owner'?' · owner':role==='staff'?' · staff':''):''}
  $('menu').hidden=false;$('mb').setAttribute('aria-expanded','true')}
 $('mb').onclick=e=>{e.stopPropagation();$('menu').hidden?openMenu():closeMenu()};
 $('menu').onclick=()=>closeMenu(); // choosing any item closes the menu
@@ -195,6 +196,16 @@ async function checkSession(){if(!role||!$('login').hidden)return;const r=await 
 function startBeat(){stopBeat();beatT=setInterval(checkSession,30000)}
 function stopBeat(){clearInterval(beatT)}
 if(document.addEventListener)document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkSession()});
+/* ---------- names: first, middle and last are required; the suffix is optional ---------- */
+const NAME_RE=/^[\p{L}][\p{L}\s.'’-]*$/u,tidy=v=>String(v||'').replace(/\s+/g,' ').trim();
+const fullName=o=>[o.first_name,o.middle_name,o.last_name,o.suffix].filter(Boolean).join(' ');
+function getNames(f,m,l,x,who){const n={first_name:tidy($(f).value),middle_name:tidy($(m).value),last_name:tidy($(l).value),suffix:tidy($(x).value)};
+ const lab={first_name:'first name',middle_name:'middle name',last_name:'last name'};
+ for(const k of ['first_name','middle_name','last_name']){
+  if(!n[k])return{error:'Enter '+who+' '+lab[k]+'.'};
+  if(n[k].length>60||!NAME_RE.test(n[k]))return{error:'The '+lab[k]+' can only contain letters, spaces, periods, hyphens and apostrophes.'}}
+ if(n.suffix&&!/^[A-Za-z0-9. ]{1,10}$/.test(n.suffix))return{error:'The suffix can only contain letters, numbers and periods, for example Jr., Sr. or III.'};
+ if(!n.suffix)delete n.suffix;return n}
 const idleEv=['click','keydown','touchstart'];
 function idleReset(){clearTimeout(idleT);idleT=setTimeout(()=>signOut('Signed out after '+IDLE_MIN+' minutes of inactivity.'),IDLE_MIN*60000)}
 function startIdle(){stopIdle();idleEv.forEach(e=>addEventListener(e,idleReset,{passive:true}));idleReset()}
@@ -333,13 +344,15 @@ async function adminCall(body){const{data,error}=await sb.functions.invoke('mana
  if(error){let m=error.message;try{m=(await error.context.json()).error||m}catch(e){}throw new Error(m)}
  if(data&&data.error)throw new Error(data.error);return data}
 async function renderUsr(){if($('usr').hidden)return;
- const r=await sb.from('shop_members').select('user_id,email,role').order('created_at');if(r.error){toast(r.error.message);return}
+ const r=await sb.from('shop_members').select('user_id,email,role,first_name,middle_name,last_name,suffix').order('created_at');if(r.error){toast(r.error.message);return}
  const me=(await sb.auth.getSession()).data.session?.user.id;
- $('utbl').innerHTML=`<table><tr><th>Email</th><th>Role</th><th></th></tr>${r.data.map(u=>`<tr><td data-l="">${esc(u.email)}</td><td data-l="Role">${esc(u.role)}</td><td data-l="" class="acts">${u.role==='owner'?'<span class="mu">'+(u.user_id===me?'you':'owner')+'</span>':`<button class="g" data-pw="${u.user_id}">New password</button> <button class="x" data-rm="${u.user_id}">Remove</button>`}</td></tr>`).join('')}</table>`;
+ $('utbl').innerHTML=`<table><tr><th>Person</th><th>Role</th><th></th></tr>${r.data.map(u=>`<tr><td data-l="">${fullName(u)?'<b>'+esc(fullName(u))+'</b><div class="mu">'+esc(u.email)+'</div>':esc(u.email)}</td><td data-l="Role">${esc(u.role)}</td><td data-l="" class="acts">${u.role==='owner'?'<span class="mu">'+(u.user_id===me?'you':'owner')+'</span>':`<button class="g" data-pw="${u.user_id}">New password</button> <button class="x" data-rm="${u.user_id}">Remove</button>`}</td></tr>`).join('')}</table>`;
  $('utbl').querySelectorAll('[data-pw]').forEach(b=>b.onclick=async()=>{const p=prompt('New password (at least 8 characters)');if(!p)return;try{await adminCall({action:'password',id:b.dataset.pw,password:p});toast('Password changed')}catch(e){toast(e.message)}});
  $('utbl').querySelectorAll('[data-rm]').forEach(b=>b.onclick=async()=>{if(!confirm('Remove this user? They will no longer be able to sign in.'))return;try{await adminCall({action:'delete',id:b.dataset.rm});renderUsr()}catch(e){toast(e.message)}})}
-$('uadd').onclick=async()=>{const email=$('ue').value.trim(),password=$('up').value;if(!email||!password){toast('Enter an email and a password');return}
- try{await adminCall({action:'create',email,password});$('ue').value=$('up').value='';toast('User added. They can only use the Sell tab.');renderUsr()}catch(e){toast(/already|registered|exists/i.test(e.message)?'That email already has an account, so it can’t be added as staff.':e.message)}};
+$('uadd').onclick=async()=>{const email=$('ue').value.trim(),password=$('up').value;
+ const nm=getNames('sfn','smn','sln','ssx','their');if(nm.error){toast(nm.error);return}
+ if(!email||!password){toast('Enter an email and a password');return}
+ try{await adminCall({action:'create',email,password,...nm});['ue','up','sfn','smn','sln','ssx'].forEach(i=>$(i).value='');toast('User added. They can only use the Sell tab.');renderUsr()}catch(e){toast(/already|registered|exists/i.test(e.message)?'That email already has an account, so it can’t be added as staff.':e.message)}};
 
 function render(){$('lp').placeholder=db.cut;$('shopn').textContent=db.shopName?'· '+db.shopName:'';renderPos();renderInv();renderRep();renderUsr()}
 render();boot();
