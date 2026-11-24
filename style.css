@@ -123,3 +123,4 @@ img,video,svg{max-width:100%}
  .tot.big{font-size:36px}
  .stat b{font-size:28px}
 }
+input.bad-input{border-color:var(--bad)}

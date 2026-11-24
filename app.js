@@ -206,6 +206,15 @@ function getNames(f,m,l,x,who){const n={first_name:tidy($(f).value),middle_name:
   if(n[k].length>60||!NAME_RE.test(n[k]))return{error:'The '+lab[k]+' can only contain letters, spaces, periods, hyphens and apostrophes.'}}
  if(n.suffix&&!/^[A-Za-z0-9. ]{1,10}$/.test(n.suffix))return{error:'The suffix can only contain letters, numbers and periods, for example Jr., Sr. or III.'};
  if(!n.suffix)delete n.suffix;return n}
+/* ---------- cash received: required, with live change ---------- */
+function updChange(){const raw=$('cash').value.trim(),c=parseFloat(raw);let t;try{t=calc(cartView())}catch(e){return}
+ $('cash').classList.remove('bad-input');$('cash').removeAttribute('aria-invalid');
+ const none=raw===''||isNaN(c);
+ $('chg').textContent=none?'Enter the cash received':c>=t.total?'Change '+peso(c-t.total):'Short by '+peso(t.total-c);
+ $('chg').className=none?'mu':c>=t.total?'ok':'bad'}
+function cashError(msg){toast(msg);const i=$('cash');i.classList.add('bad-input');i.setAttribute('aria-invalid','true');i.focus()}
+$('cash').oninput=updChange;
+$('cx').onclick=()=>{let t;try{t=calc(cartView())}catch(e){return}if(!(t.total>0)){toast('Add an item or labor first');return}$('cash').value=t.total.toFixed(2);updChange()};
 const idleEv=['click','keydown','touchstart'];
 function idleReset(){clearTimeout(idleT);idleT=setTimeout(()=>signOut('Signed out after '+IDLE_MIN+' minutes of inactivity.'),IDLE_MIN*60000)}
 function startIdle(){stopIdle();idleEv.forEach(e=>addEventListener(e,idleReset,{passive:true}));idleReset()}
@@ -282,8 +291,10 @@ function renderPos(){const v=$('q').value.trim().toLowerCase();
  <div class="tot big"><span>Total due</span><span>${peso(t.total)}</span></div>`}
 $('clr').onclick=()=>{cart={parts:[],labor:[]};render()};
 $('pay').onclick=async()=>{const c=cartView();if(!c.parts.length&&!c.labor.length){toast('The sale is empty');return}
- const t=calc(c);let cash=parseFloat($('cash').value);if(isNaN(cash))cash=t.total;
- if(cash<t.total){toast('Cash is short by '+peso(t.total-cash));return}
+ const t=calc(c),raw=$('cash').value.trim(),cash=parseFloat(raw);
+ // the cashier must type the cash received: an empty box can never complete a sale
+ if(raw===''||isNaN(cash)||cash<0){cashError('Enter the cash received before completing the sale.');return}
+ if(cash<t.total){cashError('Cash is short by '+peso(t.total-cash));return}
  $('pay').disabled=true;
  // the database recomputes prices, stock and profit, so they cannot be tampered with
  const r=await sb.rpc('complete_sale',{p_parts:c.parts.map(p=>({id:p.id,qty:p.qty})),p_labor:c.labor,p_cash:cash});
@@ -354,5 +365,5 @@ $('uadd').onclick=async()=>{const email=$('ue').value.trim(),password=$('up').va
  if(!email||!password){toast('Enter an email and a password');return}
  try{await adminCall({action:'create',email,password,...nm});['ue','up','sfn','smn','sln','ssx'].forEach(i=>$(i).value='');toast('User added. They can only use the Sell tab.');renderUsr()}catch(e){toast(/already|registered|exists/i.test(e.message)?'That email already has an account, so it can’t be added as staff.':e.message)}};
 
-function render(){$('lp').placeholder=db.cut;$('shopn').textContent=db.shopName?'· '+db.shopName:'';renderPos();renderInv();renderRep();renderUsr()}
+function render(){updChange();$('lp').placeholder=db.cut;$('shopn').textContent=db.shopName?'· '+db.shopName:'';renderPos();renderInv();renderRep();renderUsr()}
 render();boot();
